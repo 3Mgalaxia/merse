@@ -137,7 +137,7 @@ export default function AlienMenu() {
         transition: {
           duration: 0.9,
           repeat: Infinity,
-          repeatType: "reverse",
+          repeatType: "reverse" as const,
           ease: "easeInOut",
         },
       }
