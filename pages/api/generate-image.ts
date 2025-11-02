@@ -63,8 +63,8 @@ async function generateWithOpenAI({
   };
 
   const normalizedAspect = typeof aspectRatio === "string" ? aspectRatio.trim() : "";
-  const size = aspectSizeMap[normalizedAspect] ?? "1024x1024";
-  const quality = provider === "openai" ? "high" : "medium";
+  const size = (aspectSizeMap[normalizedAspect] ?? "1024x1024") as OpenAI.ImageGenerateParams["size"];
+  const quality = (provider === "openai" ? "high" : "medium") as OpenAI.ImageGenerateParams["quality"];
   const cappedCount = Math.max(1, Math.min(Number.isFinite(count) ? Number(count) : 1, 4));
 
   const stylizationNote =
@@ -97,9 +97,7 @@ async function generateWithOpenAI({
     throw new Error("Resposta sem URL de imagem.");
   }
 
-  const seeds =
-    result.data?.map((item, index) => (item.seed as string | number | undefined) ?? index + 1) ??
-    imageUrls.map((_, index) => index + 1);
+  const seeds = imageUrls.map((_, index) => index + 1);
 
   return {
     imageUrl: imageUrls[0],
