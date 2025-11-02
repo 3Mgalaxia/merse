@@ -12,7 +12,13 @@ import {
   PiShieldCheckFill,
   PiUserCircleFill,
 } from "react-icons/pi";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  easeInOut,
+  easeOut,
+  type TargetAndTransition,
+} from "framer-motion";
 import { useEnergy } from "@/contexts/EnergyContext";
 
 type CosmicLink =
@@ -126,26 +132,28 @@ export default function AlienMenu() {
     }, 360);
   };
 
-  const buttonAnimation = open
-    ? {
-        scale: [1.05, 1.16, 1.05],
-        boxShadow: [
-          "0 0 35px rgba(168,85,247,0.65)",
-          "0 0 60px rgba(217,70,239,0.75)",
-          "0 0 35px rgba(168,85,247,0.65)",
-        ],
-        transition: {
-          duration: 0.9,
-          repeat: Infinity,
-          repeatType: "reverse" as const,
-          ease: "easeInOut",
-        },
-      }
-    : {
-        scale: 1,
-        boxShadow: "0 0 25px rgba(168,85,247,0.45)",
-        transition: { duration: 0.3, ease: "easeOut" },
-      };
+  const pulseAnimation: TargetAndTransition = {
+    scale: [1.05, 1.16, 1.05],
+    boxShadow: [
+      "0 0 35px rgba(168,85,247,0.65)",
+      "0 0 60px rgba(217,70,239,0.75)",
+      "0 0 35px rgba(168,85,247,0.65)",
+    ],
+    transition: {
+      duration: 0.9,
+      repeat: Infinity,
+      repeatType: "reverse",
+      ease: easeInOut,
+    },
+  };
+
+  const idleAnimation: TargetAndTransition = {
+    scale: 1,
+    boxShadow: "0 0 25px rgba(168,85,247,0.45)",
+    transition: { duration: 0.3, ease: easeOut },
+  };
+
+  const buttonAnimation: TargetAndTransition = open ? pulseAnimation : idleAnimation;
 
   const nearLimit = energy.percentUsed >= 80 && energy.percentUsed < 100;
   const limitReached = energy.percentUsed >= 100;
