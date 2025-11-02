@@ -1,0 +1,104 @@
+{
+  "players": [
+    {
+      "id": "cosmic-01",
+      "name": "Luna Orion",
+      "handle": "@lunaorion",
+      "avatar": "/banners/RANKING/RANKING.png",
+      "likes": 9870,
+      "prompt": "Close-up da piloto Merse em traje neon, nebulosa magenta ao fundo, partículas de luz",
+      "category": "Imagem",
+      "saves": 2140
+    },
+    {
+      "id": "cosmic-02",
+      "name": "Zion Vega",
+      "handle": "@zion3d",
+      "avatar": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
+      "likes": 8640,
+      "prompt": "Speaker holográfico com fractais azuis orbitando, iluminação volumétrica",
+      "category": "Objeto 3D",
+      "saves": 1895
+    },
+    {
+      "id": "cosmic-03",
+      "name": "Mira Solis",
+      "handle": "@miras",
+      "avatar": "/banners/GERAR-ROUPA/GERAR-ROUPA1.png",
+      "likes": 7920,
+      "prompt": "Vídeo fashion com vestido líquido cintilante, passarela flutuante",
+      "category": "Vídeo",
+      "saves": 1620
+    },
+    {
+      "id": "cosmic-04",
+      "name": "Kai Nova",
+      "handle": "@knova",
+      "avatar": "/banners/GERAR-FOTO/GERAR-FOTO1.png",
+      "likes": 6650,
+      "prompt": "Retrato de androide humanóide em laboratório Merse, lentes flare violeta",
+      "category": "Imagem",
+      "saves": 1337
+    },
+    {
+      "id": "cosmic-05",
+      "name": "Orion Flux",
+      "handle": "@fluxdesign",
+      "avatar": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
+      "likes": 6420,
+      "prompt": "Drone Merse conceito com corpo transparente e núcleo pulsante",
+      "category": "Objeto 3D",
+      "saves": 1204
+    },
+    {
+      "id": "cosmic-06",
+      "name": "Aurora Lane",
+      "handle": "@auroralane",
+      "avatar": "/banners/GERAR-FOTO/GERAR-FOTO1.png",
+      "likes": 5980,
+      "prompt": "Fashion editorial em jardim cósmico com névoa lilás",
+      "category": "Imagem",
+      "saves": 1112
+    },
+    {
+      "id": "cosmic-07",
+      "name": "Riven Holt",
+      "handle": "@rivenholt",
+      "avatar": "/banners/GERAR-OBJETO/GERAR-OBJETO1.png",
+      "likes": 5770,
+      "prompt": "Console portátil Merse com UI holográfica interativa",
+      "category": "Objeto 3D",
+      "saves": 1044
+    },
+    {
+      "id": "cosmic-08",
+      "name": "Lyra Nyx",
+      "handle": "@lyranyx",
+      "avatar": "/banners/GERAR-ROUPA/GERAR-ROUPA123.png",
+      "likes": 5460,
+      "prompt": "Vídeo runway em gravidade zero com tecido bioluminescente",
+      "category": "Vídeo",
+      "saves": 986
+    },
+    {
+      "id": "cosmic-09",
+      "name": "Atlas Rune",
+      "handle": "@atlasrune",
+      "avatar": "/banners/RANKING/RANKING.png",
+      "likes": 5220,
+      "prompt": "Painel de controle Merse com circuitos dourados e partículas orbitais",
+      "category": "Imagem",
+      "saves": 940
+    },
+    {
+      "id": "cosmic-10",
+      "name": "Nova Elio",
+      "handle": "@novaelio",
+      "avatar": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
+      "likes": 4985,
+      "prompt": "Holograma de mascote Merse animado para eventos ao vivo",
+      "category": "Vídeo",
+      "saves": 901
+    }
+  ]
+}

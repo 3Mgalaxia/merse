@@ -1,0 +1,26 @@
+{
+  "videos": [
+    {
+      "id": "corp-01",
+      "userId": "demo-user",
+      "company": "Merse Labs",
+      "goal": "Lançamento de produto IA",
+      "scenario": "galaxy",
+      "duration": 45,
+      "videoUrl": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
+      "script": "Apresentar o Photon Forge com cenas de laboratório e depoimentos.",
+      "createdAt": "2025-01-09T14:05:00Z"
+    },
+    {
+      "id": "corp-02",
+      "userId": "demo-user",
+      "company": "Nebula Finance",
+      "goal": "Campanha institucional",
+      "scenario": "space",
+      "duration": 60,
+      "videoUrl": "/banners/GERAR-FOTO/GERAR-FOTO1.png",
+      "script": "Mostrar jornada do cliente em plataformas Merse, com animações minimalistas.",
+      "createdAt": "2025-01-06T09:32:00Z"
+    }
+  ]
+}

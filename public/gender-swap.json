@@ -1,0 +1,24 @@
+{
+  "transformations": [
+    {
+      "id": "swap-01",
+      "userId": "demo-user",
+      "original": "/banners/GERAR-FOTO/GERAR-FOTO1.png",
+      "targetGender": "masculino",
+      "result": "/banners/GERAR-OBJETO/GERAR-OBJETO1.png",
+      "prompt": "Retrato fotorealista masculino com estética Merse, luz violeta",
+      "intensity": 70,
+      "createdAt": "2025-01-12T14:25:00Z"
+    },
+    {
+      "id": "swap-02",
+      "userId": "demo-user",
+      "original": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
+      "targetGender": "feminino",
+      "result": "/banners/GERAR-ROUPA/GERAR-ROUPA1.png",
+      "prompt": "Transformar foto masculina em personagem feminina fashion cyberpunk",
+      "intensity": 60,
+      "createdAt": "2025-01-10T18:02:00Z"
+    }
+  ]
+}

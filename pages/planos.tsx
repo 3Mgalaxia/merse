@@ -1,0 +1,448 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useEnergy, planCatalog } from "@/contexts/EnergyContext";
+
+type TierInfo = {
+  id: string;
+  badge?: string;
+  title: string;
+  subtitle: string;
+  highlight: string;
+  priceLabel: string;
+  priceValue: number | null;
+  features: string[];
+  accent: string;
+  planKey?: keyof typeof planCatalog;
+  isContactOnly?: boolean;
+};
+
+const tiers: TierInfo[] = [
+  {
+    id: "free",
+    badge: "Explorar",
+    title: "Free Orbit",
+    subtitle: "Experimente a Merse",
+    highlight: "300 créditos Merse / mês",
+    priceLabel: "Gratuito",
+    priceValue: 0,
+    priceValue: 0,
+    features: [
+      "Geração básica com motores comunitários",
+      "Download ilimitado em resolução padrão",
+      "Acesso ao Prompt Chat compacto",
+    ],
+    accent: "from-slate-500/40 via-slate-500/15 to-slate-500/0",
+    planKey: "free",
+  },
+  {
+    id: "pulse",
+    badge: "Novo ciclo",
+    title: "Pulse Starter",
+    subtitle: "Primeiro salto intergaláctico",
+    highlight: "600 créditos Merse / mês",
+    priceLabel: "US$ 10/mês",
+    priceValue: 10,
+    features: [
+      "Fábrica de prompts com assistente Merse",
+      "Galeria compartilhada e downloads ilimitados",
+      "Até 3 projetos ativos no Photon Forge",
+    ],
+    accent: "from-purple-500/50 via-purple-500/10 to-purple-500/0",
+    planKey: "pulse",
+  },
+  {
+    id: "nebula",
+    badge: "Mais popular",
+    title: "Nebula Studio",
+    subtitle: "Fluxo contínuo para creators",
+    highlight: "3.000 créditos Merse / mês",
+    priceLabel: "US$ 35/mês",
+    priceValue: 35,
+    features: [
+      "Automação de variações e estilos",
+      "Biblioteca privada com controle de equipe",
+      "Acesso antecipado aos motores Merse",
+      "Suporte em 12h com consultoria de prompts",
+    ],
+    accent: "from-indigo-500/50 via-indigo-500/10 to-indigo-500/0",
+    planKey: "nebula",
+  },
+  {
+    id: "galaxy",
+    badge: "Sob medida",
+    title: "Galáxia Prime",
+    subtitle: "Escala ilimitada para squads",
+    highlight: "Créditos sob demanda",
+    priceLabel: "Fale com a Merse",
+    priceValue: null,
+    features: [
+      "Modelos proprietários Merse treinados na sua base",
+      "SLA 24/7 com squad dedicado",
+      "Governança e assinatura eletrônica integrada",
+      "Blueprints exclusivos e co-criação de features",
+    ],
+    accent: "from-cyan-500/50 via-cyan-500/10 to-cyan-500/0",
+    isContactOnly: true,
+  },
+];
+
+export default function Planos() {
+  const { setPlan, plan } = useEnergy();
+  const [selectedTier, setSelectedTier] = useState<TierInfo | null>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const checkoutSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedTierInfo = useMemo(() => {
+    if (!selectedTier) return null;
+    return tiers.find((tier) => tier.id === selectedTier.id) ?? null;
+  }, [selectedTier]);
+
+  const handleSelectTier = (tier: TierInfo) => {
+    setSelectedTier(tier);
+    if (tier.isContactOnly || !tier.planKey) {
+      setSelectedTier(null);
+      window.location.href =
+        "mailto:hello@merse.gg?subject=Gal%C3%A1xia%20Prime%20-%20Quero%20um%20plano%20sob%20medida";
+      return;
+    }
+    setShowCheckout(true);
+    setCheckoutError(null);
+  };
+
+  useEffect(() => {
+    if (!showCheckout) return;
+    const timer = window.setTimeout(() => {
+      checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [showCheckout]);
+
+  const handleCheckoutSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedTierInfo) return;
+
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      plan: selectedTierInfo.planKey,
+      price: selectedTierInfo.priceValue,
+      customer: {
+        name: formData.get("cardName"),
+        email: formData.get("email"),
+        document: formData.get("document"),
+        zip: formData.get("zip"),
+        city: formData.get("city"),
+        state: formData.get("state"),
+      },
+    };
+
+    // Planos gratuitos não disparam checkout.
+    if (!selectedTierInfo.priceValue || !selectedTierInfo.planKey) {
+      if (selectedTierInfo.planKey) {
+        setPlan(selectedTierInfo.planKey);
+      }
+      setShowCheckout(false);
+      setSelectedTier(null);
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      setCheckoutError(null);
+      const response = await fetch("/api/payments/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: selectedTierInfo.planKey,
+          title: selectedTierInfo.title,
+          price: selectedTierInfo.priceValue,
+          customer: payload.customer,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error ?? "Não foi possível iniciar o pagamento.");
+      }
+
+      const data = await response.json();
+      if (selectedTierInfo.planKey) {
+        setPlan(selectedTierInfo.planKey);
+      }
+      if (data.initPoint) {
+        window.location.href = data.initPoint as string;
+      } else {
+        setCheckoutError("Preferência criada, mas não foi possível abrir o checkout.");
+      }
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Erro inesperado.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-black text-white">
+      <div className="absolute inset-0 bg-gradient-to-b from-black via-slate-950/70 to-black" />
+      <main className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 pb-24 pt-40">
+        <header className="flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">Planos Merse</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">Escolha sua órbita ideal</h1>
+            <p className="mt-3 max-w-2xl text-sm text-slate-300">
+              Atualize sua nave para desbloquear limites de energia maiores, automações avançadas e
+              suporte de primeira linha. Os planos podem ser alterados a qualquer momento.
+            </p>
+          </div>
+          <Link
+            href="/gerar"
+            className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:border-white/40 hover:bg-white/20"
+          >
+            Voltar
+          </Link>
+        </header>
+
+        <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {tiers.map((tier) => {
+            const isCurrent = tier.planKey ? plan === tier.planKey : false;
+            const limitLabel = tier.planKey
+              ? `${planCatalog[tier.planKey].limit.toLocaleString("en-US")} créditos`
+              : tier.highlight;
+            return (
+              <div
+                key={tier.id}
+                className="group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-white/80 backdrop-blur-xl transition hover:border-white/30 hover:bg-white/10"
+              >
+                <div
+                  className={`pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br ${tier.accent} opacity-40 transition group-hover:opacity-60`}
+                />
+                <div className="relative z-10 flex flex-col gap-4">
+                  <div className="flex flex-col gap-3">
+                    {tier.badge && (
+                      <span className="self-start rounded-full border border-white/20 bg-black/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-purple-100">
+                        {tier.badge}
+                      </span>
+                    )}
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.35em] text-purple-100/80">
+                        {tier.subtitle}
+                      </p>
+                      <h3 className="mt-2 text-2xl font-semibold text-white">{tier.title}</h3>
+                      <p className="mt-2 text-lg font-medium text-white/90">{tier.priceLabel}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.3em] text-white/60">
+                        {limitLabel}
+                      </p>
+                      <p className="mt-2 text-sm text-white/70">{tier.highlight}</p>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-2 text-sm text-white/75">
+                    {tier.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-white/60" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button
+                    className={`mt-auto rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
+                      isCurrent
+                        ? "border-white/50 bg-white/20 text-white/90 cursor-default"
+                        : "border-white/30 bg-white/10 text-white hover:border-white/50 hover:bg-white/20"
+                    }`}
+                    onClick={() => handleSelectTier(tier)}
+                    disabled={isCurrent}
+                  >
+                    {tier.isContactOnly
+                      ? "Falar com a Merse"
+                      : isCurrent
+                      ? "Plano atual"
+                      : "Assinar agora"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/80 backdrop-blur">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-white">
+            Perguntas frequentes
+          </h2>
+          <div className="mt-4 grid gap-4 text-white/70">
+            <div>
+              <p className="text-sm font-semibold text-white">Posso migrar entre planos a qualquer momento?</p>
+              <p className="mt-1 text-sm">
+                Sim. A cobrança é ajustada proporcionalmente e você mantém o histórico de energia
+                intacto durante a transição.
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Há desconto para equipes?</p>
+              <p className="mt-1 text-sm">
+                Planos Pro e Enterprise oferecem assentos adicionais com compartilhamento de limites
+                e dashboards unificados de monitoramento.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {showCheckout && selectedTierInfo && (
+          <section
+            ref={checkoutSectionRef}
+            className="rounded-3xl border border-purple-300/40 bg-black/60 p-8 text-sm text-white/80 backdrop-blur-xl shadow-[0_0_40px_rgba(168,85,247,0.3)]"
+          >
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.35em] text-purple-200/90">
+                  Ativar plano
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  {selectedTierInfo.title}
+                </h2>
+                <p className="mt-2 text-xs text-white/60">
+                  {selectedTierInfo.priceValue && selectedTierInfo.planKey
+                    ? `Investimento: ${selectedTierInfo.priceLabel} | Limite: ${planCatalog[
+                        selectedTierInfo.planKey
+                      ].limit.toLocaleString("en-US")} créditos`
+                    : "Plano gratuito - confirme seus dados para ativar."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCheckout(false);
+                  setSelectedTier(null);
+                  setCheckoutError(null);
+                }}
+                className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white transition hover:border-white/40 hover:bg-white/20"
+              >
+                Cancelar
+              </button>
+            </div>
+
+            <form className="grid gap-5 md:grid-cols-2" onSubmit={handleCheckoutSubmit}>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">Nome no cartão</span>
+                <input
+                  type="text"
+                  name="cardName"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="Ex.: Alex T. Merse"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">Número do cartão</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={19}
+                  name="cardNumber"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="0000 0000 0000 0000"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">Validade</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  name="cardExpiry"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="MM/AA"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">CVV</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  name="cardCvv"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="***"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">CPF / CNPJ</span>
+                <input
+                  type="text"
+                  name="document"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="000.000.000-00"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">CEP</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={9}
+                  name="zip"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="00000-000"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">Cidade</span>
+                <input
+                  type="text"
+                  name="city"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="São Paulo"
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">Estado</span>
+                <input
+                  type="text"
+                  name="state"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="SP"
+                  required
+                />
+              </label>
+              <label className="md:col-span-2 flex flex-col gap-2">
+                <span className="text-xs uppercase tracking-[0.25em] text-white">E-mail de contato</span>
+                <input
+                  type="email"
+                  name="email"
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                  placeholder="voce@merse.gg"
+                  required
+                />
+              </label>
+              <div className="md:col-span-2 flex items-center justify-between">
+                <label className="flex items-center gap-2 text-xs text-white/70">
+                  <input type="checkbox" required className="h-4 w-4 rounded border border-white/40 bg-black/40" />
+                  Aceito os termos de contratação e a política de privacidade Merse.
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-full border border-purple-300/30 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 px-6 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] transition hover:shadow-[0_0_28px_rgba(168,85,247,0.7)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? "Processando..." : "Confirmar pagamento"}
+                </button>
+              </div>
+              {checkoutError && (
+                <p className="md:col-span-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">
+                  {checkoutError}
+                </p>
+              )}
+            </form>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
