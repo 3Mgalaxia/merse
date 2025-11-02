@@ -77,19 +77,16 @@ async function generateWithOpenAI({
       ? " | Estilo Flux experimental, mistura de texturas orgânicas e luz teatral difusa."
       : " | Estilo Merse premium, microdetalhes nítidos e luz volumétrica.";
 
-  const payload: Record<string, unknown> = {
+  const requestPayload: OpenAI.ImageGenerateParams = {
     model: "gpt-image-1",
     prompt: `${prompt.trim()}${promptSuffix}${stylizationNote}`.trim(),
     size,
     quality,
     n: cappedCount,
+    ...(referenceImage ? { image: referenceImage } : {}),
   };
 
-  if (referenceImage) {
-    payload.image = referenceImage;
-  }
-
-  const result = await openai.images.generate(payload);
+  const result = await openai.images.generate(requestPayload);
 
   const imageUrls =
     result.data
