@@ -15,6 +15,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const [showGalaxyTransition, setShowGalaxyTransition] = useState(false);
   const shouldAnimateRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideDelayRef = useRef<number>(2000);
 
   useEffect(() => {
     const handleStart = (url: string) => {
@@ -27,6 +28,7 @@ export default function App({ Component, pageProps }: AppProps) {
       shouldAnimateRef.current = shouldAnimate;
 
       if (shouldAnimate) {
+        hideDelayRef.current = targetPath === "/login" ? 1000 : 2000;
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
@@ -76,7 +78,7 @@ export default function App({ Component, pageProps }: AppProps) {
       setShowGalaxyTransition(false);
       shouldAnimateRef.current = false;
       timeoutRef.current = null;
-    }, 2000);
+    }, hideDelayRef.current);
 
     return () => {
       if (timeoutRef.current) {
