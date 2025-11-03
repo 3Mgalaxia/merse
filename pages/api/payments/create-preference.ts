@@ -62,6 +62,7 @@ export default async function handler(
       body: {
         items: [
           {
+            id: plan,
             title,
             quantity: 1,
             unit_price: price,

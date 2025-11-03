@@ -52,33 +52,17 @@ export default async function handler(
   ].join("\n");
 
   try {
-    const completion = await openai.responses.create({
-      model: process.env.OPENAI_PROMPT_MODEL ?? "gpt-4.1-mini",
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_PROMPT_MODEL ?? "gpt-4o-mini",
       temperature: 0.65,
-      max_output_tokens: 600,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: prompt,
-            },
-          ],
-        },
-        ...sanitized.map((message) => ({
-          role: message.role,
-          content: [
-            {
-              type: "input_text",
-              text: message.content,
-            },
-          ],
-        })),
+      max_tokens: 600,
+      messages: [
+        { role: "system", content: prompt },
+        ...sanitized.map((message) => ({ role: message.role, content: message.content })),
       ],
     });
 
-    const reply = completion.output_text?.trim();
+    const reply = completion.choices[0]?.message?.content?.trim();
 
     if (!reply) {
       throw new Error("Resposta vazia da OpenAI.");

@@ -380,7 +380,7 @@ async function generateWithProvider(params: GenerationParams) {
     prompt: params.prompt.trim(),
     aspectRatio: aspect,
     duration,
-    referenceImage: params.referenceImage,
+    referenceImage: params.referenceImage ?? "",
   });
 
   const prediction = await runReplicatePrediction({

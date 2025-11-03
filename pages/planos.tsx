@@ -25,7 +25,6 @@ const tiers: TierInfo[] = [
     highlight: "300 créditos Merse / mês",
     priceLabel: "Gratuito",
     priceValue: 0,
-    priceValue: 0,
     features: [
       "Geração básica com motores comunitários",
       "Download ilimitado em resolução padrão",

@@ -16,6 +16,7 @@ type SuccessResponse = {
   imageUrl: string;
   images: string[];
   seeds: Array<string | number>;
+  provider: Provider;
 };
 
 type ErrorResponse = {
