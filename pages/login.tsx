@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { FaApple, FaGoogle } from "react-icons/fa";
 import Link from "next/link";
@@ -21,7 +21,7 @@ function mapFirebaseError(error: unknown, fallback: string) {
 
 export default function Login() {
   const router = useRouter();
-  const { user, login, signup, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { login, signup, signInWithGoogle, signInWithApple, logout, loading } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,13 +30,15 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!user || loading) return;
-    const redirectTo =
-      typeof router.query.redirect === "string" && router.query.redirect.length > 0
-        ? router.query.redirect
-        : "/gerar";
-    router.replace(redirectTo);
-  }, [user, loading, router]);
+    void logout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const redirectTo = useMemo(() => {
+    return typeof router.query.redirect === "string" && router.query.redirect.length > 0
+      ? router.query.redirect
+      : "/gerar";
+  }, [router.query.redirect]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -59,10 +61,13 @@ export default function Login() {
       } else {
         await signup(email, password);
       }
+      await router.replace(redirectTo);
     } catch (authError) {
       setError(mapFirebaseError(authError, "Não foi possível completar a solicitação. Tente novamente."));
       setIsSubmitting(false);
+      return;
     }
+    setIsSubmitting(false);
   };
 
   return (
@@ -111,6 +116,7 @@ export default function Login() {
               setIsSubmitting(true);
               try {
                 await signInWithGoogle();
+                await router.replace(redirectTo);
               } catch (authError) {
                 setError(
                   mapFirebaseError(authError, "Não foi possível autenticar com a conta Google agora."),
@@ -130,6 +136,7 @@ export default function Login() {
               setIsSubmitting(true);
               try {
                 await signInWithApple();
+                await router.replace(redirectTo);
               } catch (authError) {
                 setError(
                   mapFirebaseError(authError, "Não foi possível autenticar com a conta Apple agora."),
