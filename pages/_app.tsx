@@ -15,7 +15,6 @@ export default function App({ Component, pageProps }: AppProps) {
   const [showGalaxyTransition, setShowGalaxyTransition] = useState(false);
   const shouldAnimateRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hideDelayRef = useRef<number>(2000);
 
   useEffect(() => {
     const handleStart = (url: string) => {
@@ -28,18 +27,30 @@ export default function App({ Component, pageProps }: AppProps) {
       shouldAnimateRef.current = shouldAnimate;
 
       if (shouldAnimate) {
-        hideDelayRef.current = targetPath === "/login" ? 1000 : 2000;
+        const delay = targetPath === "/login" ? 1000 : 2000;
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
         setShowGalaxyTransition(true);
+        timeoutRef.current = setTimeout(() => {
+          setShowGalaxyTransition(false);
+          shouldAnimateRef.current = false;
+          timeoutRef.current = null;
+        }, delay);
       }
     };
 
     const handleStop = () => {
       if (!shouldAnimateRef.current) return;
-      // We let the auto-dismiss effect handle hiding after the timer.
+      if (!timeoutRef.current) {
+        const delay = router.pathname === "/login" ? 1000 : 2000;
+        timeoutRef.current = setTimeout(() => {
+          setShowGalaxyTransition(false);
+          shouldAnimateRef.current = false;
+          timeoutRef.current = null;
+        }, delay);
+      }
     };
 
     const handleError = () => {
@@ -67,26 +78,13 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [router]);
 
   useEffect(() => {
-    if (!showGalaxyTransition) return;
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      setShowGalaxyTransition(false);
-      shouldAnimateRef.current = false;
-      timeoutRef.current = null;
-    }, hideDelayRef.current);
-
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, [showGalaxyTransition]);
+  }, []);
 
   return (
     <AuthProvider>
