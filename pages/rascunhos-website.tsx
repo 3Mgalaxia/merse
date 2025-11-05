@@ -8,6 +8,7 @@ import {
   PiStarFourFill,
   PiUploadSimpleFill,
 } from "react-icons/pi";
+import { useEnergy } from "@/contexts/EnergyContext";
 
 type LayoutPreset = {
   id: string;
@@ -123,6 +124,7 @@ const STEPS = [
 ];
 
 export default function RascunhoWebsite() {
+  const energy = useEnergy();
   const [state, setState] = useState<FormState>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{
@@ -184,6 +186,12 @@ export default function RascunhoWebsite() {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+
+    if (energy.plan === "free") {
+      setErrorMessage("O plano Free não permite gerar blueprints de sites. Atualize seu plano para usar o laboratório Merse.");
+      setIsSubmitting(false);
+      return;
+    }
 
     const payload = {
       siteName: state.siteName,

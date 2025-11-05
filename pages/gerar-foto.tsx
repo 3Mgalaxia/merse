@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiArrowsClockwiseBold,
@@ -37,7 +38,7 @@ const PROVIDERS: ProviderConfig[] = [
     id: "openai",
     label: "ChatGPT Vision",
     description: "Precisão máxima via OpenAI — indicado para campanhas premium.",
-    cost: 24,
+    cost: 26,
     accent: "from-purple-500/20 via-fuchsia-500/10 to-indigo-500/20",
     icon: "openai",
   },
@@ -95,6 +96,7 @@ type GeneratedImage = {
 export default function GerarFoto() {
   const energy = useEnergy();
   const { user } = useAuth();
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [aspect, setAspect] = useState<AspectPreset>(ASPECT_PRESETS[0]);
   const [stylization, setStylization] = useState(72);
@@ -163,8 +165,15 @@ export default function GerarFoto() {
       return;
     }
 
-    if (usageExceeds) {
-      setError("Você atingiu o limite do seu plano. Turbine seu acesso na página de planos.");
+    if (usageExceeds || !energy.canGenerateImage(provider.id)) {
+      const message =
+        provider.id === "merse"
+          ? "Plano Free pode gerar no máximo 3 visões Merse AI 1.0 por dia. Atualize seu plano para liberar mais criações."
+          : "Plano Free permite apenas 1 imagem ChatGPT por dia. Atualize seu plano para continuar gerando.";
+      setError(message);
+      setTimeout(() => {
+        router.push("/planos").catch(() => void 0);
+      }, 600);
       return;
     }
 
@@ -230,6 +239,8 @@ export default function GerarFoto() {
       }
 
       setGeneratedImages(images);
+      setIsLoading(false);
+      energy.incrementDailyImageCount(provider.id);
       energy.registerUsage(provider.cost);
 
       const timestamp = new Date().toISOString();

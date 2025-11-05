@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiArrowsClockwiseBold,
@@ -49,6 +50,7 @@ type GeneratedRender = {
 };
 
 export default function GerarObjeto() {
+  const router = useRouter();
   const energy = useEnergy();
   const { user } = useAuth();
   const [prompt, setPrompt] = useState(
@@ -98,6 +100,14 @@ export default function GerarObjeto() {
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError("Descreva o objeto que deseja renderizar.");
+      return;
+    }
+
+    if (String(energy.plan) === "free") {
+      setError("O plano Free não permite gerar objetos 3D. Redirecionando para os planos Merse...");
+      setTimeout(() => {
+        router.push("/planos").catch(() => void 0);
+      }, 600);
       return;
     }
 

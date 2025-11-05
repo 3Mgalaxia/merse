@@ -15,14 +15,22 @@ type PlanConfig = {
 
 const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
   free: { key: "free", name: "Free Orbit", limit: 300 },
-  pulse: { key: "pulse", name: "Pulse Starter", limit: 600 },
-  nebula: { key: "nebula", name: "Nebula Studio", limit: 3000 },
+  pulse: { key: "pulse", name: "Pulse Starter", limit: 900 },
+  nebula: { key: "nebula", name: "Nebula Studio", limit: 5000 },
   supernova: { key: "supernova", name: "Supernova Pro", limit: 10000 },
 };
 
 type EnergySnapshot = {
   plan: PlanKey;
   usage: number;
+};
+
+type GenerationProviderKey = "openai" | "flux" | "merse";
+
+type DailyUsageSnapshot = {
+  date: string;
+  openaiImages: number;
+  merseImages: number;
 };
 
 type EnergyContextValue = {
@@ -34,6 +42,9 @@ type EnergyContextValue = {
   remaining: number;
   registerUsage: (amount?: number) => void;
   setPlan: (plan: PlanKey) => void;
+  dailyUsage: DailyUsageSnapshot;
+  canGenerateImage: (provider: GenerationProviderKey) => boolean;
+  incrementDailyImageCount: (provider: GenerationProviderKey) => void;
 };
 
 const STORAGE_KEY = "merse.energy";
@@ -73,10 +84,20 @@ function loadInitialState(): EnergySnapshot {
 export function EnergyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [snapshot, setSnapshot] = useState<EnergySnapshot>({ plan: "free", usage: 0 });
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [dailyUsage, setDailyUsage] = useState<DailyUsageSnapshot>({
+    date: todayKey,
+    openaiImages: 0,
+    merseImages: 0,
+  });
   const hasLoadedRef = useRef(false);
   const energyDocRef = useMemo(() => {
     if (!user || !firebaseFirestore) return null;
     return doc(firebaseFirestore, "users", user.uid, "meta", "energy");
+  }, [user]);
+  const dailyUsageDocRef = useMemo(() => {
+    if (!user || !firebaseFirestore) return null;
+    return doc(firebaseFirestore, "users", user.uid, "meta", "dailyUsage");
   }, [user]);
 
   const forcedPlan = useMemo<PlanKey | null>(() => {
@@ -93,6 +114,11 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     const initialState = loadInitialState();
     setSnapshot(initialState);
     hasLoadedRef.current = true;
+    setDailyUsage({
+      date: todayKey,
+      openaiImages: 0,
+      merseImages: 0,
+    });
   }, []);
 
   useEffect(() => {
@@ -137,20 +163,69 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
 
   const persistSnapshot = useCallback(
     (next: EnergySnapshot) => {
-    if (energyDocRef) {
-      void setDoc(
-        energyDocRef,
-        {
-          plan: next.plan,
-          usage: next.usage,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    }
-  },
+      if (energyDocRef) {
+        void setDoc(
+          energyDocRef,
+          {
+            plan: next.plan,
+            usage: next.usage,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+    },
     [energyDocRef],
   );
+
+  useEffect(() => {
+    if (!user) {
+      setDailyUsage({ date: todayKey, openaiImages: 0, merseImages: 0 });
+      return;
+    }
+    if (!dailyUsageDocRef) return;
+
+    const unsubscribe = onSnapshot(dailyUsageDocRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data() as Partial<DailyUsageSnapshot>;
+        if (data.date === todayKey) {
+          setDailyUsage({
+            date: todayKey,
+            openaiImages:
+              typeof data.openaiImages === "number" && data.openaiImages >= 0 ? data.openaiImages : 0,
+            merseImages:
+              typeof data.merseImages === "number" && data.merseImages >= 0 ? data.merseImages : 0,
+          });
+        } else {
+          const reset: DailyUsageSnapshot = {
+            date: todayKey,
+            openaiImages: 0,
+            merseImages: 0,
+          };
+          void setDoc(
+            dailyUsageDocRef,
+            { ...reset, updatedAt: serverTimestamp() },
+            { merge: true },
+          );
+          setDailyUsage(reset);
+        }
+      } else {
+        const reset: DailyUsageSnapshot = {
+          date: todayKey,
+          openaiImages: 0,
+          merseImages: 0,
+        };
+        void setDoc(
+          dailyUsageDocRef,
+          { ...reset, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        setDailyUsage(reset);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, dailyUsageDocRef, todayKey]);
 
   useEffect(() => {
     if (forcedPlan && snapshot.plan !== forcedPlan) {
@@ -195,6 +270,45 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const canGenerateImage = useCallback(
+    (provider: GenerationProviderKey) => {
+      if (snapshot.plan !== "free") return true;
+      if (provider === "merse") {
+        return dailyUsage.merseImages < 3;
+      }
+      return dailyUsage.openaiImages < 1;
+    },
+    [snapshot.plan, dailyUsage],
+  );
+
+  const incrementDailyImageCount = useCallback(
+    (provider: GenerationProviderKey) => {
+      if (!dailyUsageDocRef) return;
+      setDailyUsage((prev) => {
+        const next: DailyUsageSnapshot = {
+          date: prev.date,
+          openaiImages: prev.openaiImages,
+          merseImages: prev.merseImages,
+        };
+        if (provider === "merse") {
+          next.merseImages = Math.min(next.merseImages + 1, 999);
+        } else {
+          next.openaiImages = Math.min(next.openaiImages + 1, 999);
+        }
+        void setDoc(
+          dailyUsageDocRef,
+          {
+            ...next,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+        return next;
+      });
+    },
+    [dailyUsageDocRef],
+  );
+
   const value = useMemo<EnergyContextValue>(
     () => ({
       plan: planConfig.key,
@@ -205,8 +319,23 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       remaining,
       registerUsage,
       setPlan,
+      dailyUsage,
+      canGenerateImage,
+      incrementDailyImageCount,
     }),
-    [planConfig.key, planConfig.name, usage, limit, percentUsed, remaining],
+    [
+      planConfig.key,
+      planConfig.name,
+      usage,
+      limit,
+      percentUsed,
+      remaining,
+      registerUsage,
+      setPlan,
+      dailyUsage,
+      canGenerateImage,
+      incrementDailyImageCount,
+    ],
   );
 
   return <EnergyContext.Provider value={value}>{children}</EnergyContext.Provider>;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiCoatHangerFill,
@@ -56,6 +57,7 @@ type RenderResult = {
 export default function VideoRoupas() {
   const energy = useEnergy();
   const { user } = useAuth();
+  const router = useRouter();
   const [prompt, setPrompt] = useState(
     "Traje streetwear feminino futurista com jaqueta holográfica e tênis antigravidade.",
   );
@@ -102,9 +104,17 @@ export default function VideoRoupas() {
     }
   };
 
-  const handleGenerate = async () => {
+const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError("Descreva o look que deseja animar.");
+      return;
+    }
+
+    if (String(energy.plan) === "free") {
+      setError("O plano Free não libera geração de vídeos de moda. Redirecionando para a página de planos...");
+      setTimeout(() => {
+        router.push("/planos").catch(() => void 0);
+      }, 600);
       return;
     }
 

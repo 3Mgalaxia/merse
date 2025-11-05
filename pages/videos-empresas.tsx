@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiBriefcaseFill,
@@ -86,6 +87,7 @@ const HISTORY_SOURCE = "/corporate-videos.json";
 export default function VideosEmpresas() {
   const energy = useEnergy();
   const { user } = useAuth();
+  const router = useRouter();
   const [logo, setLogo] = useState<string | null>(null);
   const [logoPayload, setLogoPayload] = useState<string | undefined>();
   const [companyName, setCompanyName] = useState("Merse Labs");
@@ -153,6 +155,24 @@ export default function VideosEmpresas() {
   };
 
   const handleGenerate = async () => {
+    if (!companyName.trim() || !scriptBrief.trim()) {
+      setError("Informe o nome da empresa e o briefing para gerar o roteiro.");
+      return;
+    }
+
+    if (energy.plan === "free") {
+      setError("O plano Free não permite gerar vídeos corporativos. Atualize seu plano para usar este módulo.");
+      return;
+    }
+
+    if (String(energy.plan) === "free") {
+      setError("O plano Free não permite gerar vídeos corporativos. Redirecionando para os planos Merse...");
+      setTimeout(() => {
+        router.push("/planos").catch(() => void 0);
+      }, 600);
+      return;
+    }
+
     if (usageExceeds) {
       setError("Energia insuficiente. Atualize seu plano para gerar mais vídeos corporativos.");
       return;

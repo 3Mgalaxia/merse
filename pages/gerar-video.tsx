@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiClockCountdownFill,
@@ -109,6 +110,7 @@ type GeneratedVideo = {
 };
 
 export default function GerarVideo() {
+  const router = useRouter();
   const energy = useEnergy();
   const { user } = useAuth();
   const [prompt, setPrompt] = useState("");
@@ -184,6 +186,14 @@ export default function GerarVideo() {
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError("Descreva a sequência que deseja gerar.");
+      return;
+    }
+
+    if (String(energy.plan) === "free") {
+      setError("O plano Free não permite gerar vídeos. Redirecionando para a página de planos...");
+      setTimeout(() => {
+        router.push("/planos").catch(() => void 0);
+      }, 600);
       return;
     }
 
