@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import { useRouter } from "next/router";
-import { auth } from "@/lib/firebase";
+import { firebaseAuth } from "@/lib/firebase";
 
 export default function AuthVSCode() {
   const router = useRouter();
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
+    if (!firebaseAuth) return;
+
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) {
         void router.push("/login?redirect=/auth/vscode");
         return;

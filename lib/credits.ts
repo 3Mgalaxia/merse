@@ -58,7 +58,8 @@ export async function ensureUserCreditProfile(uid: string, planOverride?: PlanKe
 }
 
 export async function applyCreditCharges(uid: string, charges: CreditCharge[]) {
-  if (!firebaseFirestore) {
+  const db = firebaseFirestore;
+  if (!db) {
     throw new Error("Firestore não inicializado.");
   }
 
@@ -66,8 +67,8 @@ export async function applyCreditCharges(uid: string, charges: CreditCharge[]) {
     return { plan: "free" as PlanKey, remainingCredits: PLAN_CONFIG.free.limit, totalCost: 0 };
   }
 
-  const result = await runTransaction(firebaseFirestore, async (transaction) => {
-    const userRef = doc(firebaseFirestore, "users", uid);
+  const result = await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, "users", uid);
     const snapshot = await transaction.get(userRef);
     const data = snapshot.exists() ? snapshot.data() : {};
 

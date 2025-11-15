@@ -173,6 +173,31 @@ const moduleBlocks: Array<{
   },
 ];
 
+const apiShowcase = [
+  {
+    title: "Merse · Gerador de Imagem",
+    href: "https://replicate.com/3mgalaxia/merse-gerador-de-imagem",
+    description: "Transforme prompts em renders cinematográficos no endpoint otimizado da Merse.",
+    badge: "Imagem",
+    accent: "from-purple-500/40 via-blue-500/25 to-transparent",
+  },
+  {
+    title: "Merse · Base Criativa",
+    href: "https://replicate.com/3mgalaxia/merse",
+    description:
+      "Envie uma foto e receba a versão masculina ou feminina com estilo Merse mantendo o rosto original.",
+    badge: "Gênero",
+    accent: "from-fuchsia-500/35 via-indigo-500/25 to-transparent",
+  },
+  {
+    title: "Merse · Gerador de Site",
+    href: "https://replicate.com/3mgalaxia/merse-gerador-de-site",
+    description: "Receba HTML completo para landings e seções futuristas com estética Merse.",
+    badge: "Sites",
+    accent: "from-cyan-500/35 via-emerald-500/25 to-transparent",
+  },
+];
+
 const promptPacks = [
   {
     id: "ceu",
@@ -492,6 +517,40 @@ export default function Gerar() {
             </Link>
           );
           })}
+        </div>
+      </section>
+
+      <section className="mt-12 space-y-6">
+        <header className="flex flex-col gap-2 text-white/80">
+          <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">APIs públicas</p>
+          <h3 className="text-2xl font-semibold text-white md:text-3xl">Integre direto com o laboratório Merse</h3>
+          <p className="max-w-3xl text-sm text-white/60">
+            Conecte seu stack às engines hospedadas no Replicate e acelere protótipos de imagem, troca de gênero e HTML.
+          </p>
+        </header>
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {apiShowcase.map((api) => (
+            <a
+              key={api.href}
+              href={api.href}
+              target="_blank"
+              rel="noreferrer"
+              className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-1"
+            >
+              <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent}`} />
+              <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
+              <div className="relative flex h-full flex-col gap-4 text-white">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
+                  {api.badge}
+                </span>
+                <h4 className="text-xl font-semibold">{api.title}</h4>
+                <p className="text-sm text-white/70">{api.description}</p>
+                <span className="mt-auto inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/60 transition group-hover:text-white">
+                  Abrir no Replicate <span aria-hidden>↗</span>
+                </span>
+              </div>
+            </a>
+          ))}
         </div>
       </section>
 

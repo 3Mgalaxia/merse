@@ -345,7 +345,6 @@ export default function PromptChat({
                   </div>
                 ))
               )}
-            )}
           </div>
 
             <div className="border-t border-white/5 bg-black/40 px-4 py-4">

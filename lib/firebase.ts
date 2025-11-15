@@ -58,7 +58,7 @@ try {
 
 export const firebaseEnabled = enabled;
 export const firebaseApp = app;
-export const firebaseAuth = auth;
+export const firebaseAuth: Auth | null = auth;
 export const firebaseFirestore = firestore;
 export const firebaseStorage = storage;
 
