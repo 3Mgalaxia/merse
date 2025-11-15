@@ -34,16 +34,20 @@ export default async function handler(
     return res.status(405).json({ error: "Método não suportado." });
   }
 
-  const accessToken = process.env.MP_ACCESS_TOKEN;
+  const accessToken =
+    process.env.MERCADOPAGO_ACCESS_TOKEN ?? process.env.MP_ACCESS_TOKEN ?? process.env.MP_ACCESS_TOKEN;
   if (!accessToken) {
-    return res.status(500).json({ error: "Credenciais do Mercado Pago não configuradas." });
+    return res
+      .status(500)
+      .json({ error: "Credenciais do Mercado Pago não configuradas (MERCADOPAGO_ACCESS_TOKEN)." });
   }
 
-  const { plan, title, price, customer } = req.body as {
+  const { plan, title, price, customer, paymentMethod } = req.body as {
     plan?: string;
     title?: string;
     price?: number;
     customer?: { email?: string; name?: string };
+    paymentMethod?: "credit" | "debit";
   };
 
   if (!plan || !title || typeof price !== "number") {
@@ -58,6 +62,17 @@ export default async function handler(
     const { MercadoPagoConfig, Preference } = await import("mercadopago");
     const client = new MercadoPagoConfig({ accessToken });
     const preference = new Preference(client);
+    const paymentPreference =
+      paymentMethod === "debit"
+        ? {
+            excluded_payment_types: [{ id: "credit_card" }, { id: "ticket" }],
+            default_payment_type_id: "debit_card",
+          }
+        : {
+            excluded_payment_types: [{ id: "ticket" }],
+            default_payment_type_id: "credit_card",
+          };
+
     const checkout = await preference.create({
       body: {
         items: [
@@ -73,12 +88,14 @@ export default async function handler(
           email: customer?.email ?? "contato@merse.gg",
           name: customer?.name ?? "Piloto Merse",
         },
+        payment_methods: paymentPreference,
         back_urls: {
           success: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/energia-cosmica`,
           pending: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/planos`,
           failure: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/planos`,
         },
         auto_return: "approved",
+        binary_mode: true,
       },
     });
 

@@ -747,7 +747,7 @@ export default function GerarFoto() {
                   <PiXBold className="text-base" />
                 </button>
                 <div className="h-full overflow-hidden px-4 pb-4 pt-10">
-                  <PromptChat embedded />
+                  <PromptChat embedded storageKey="merse.chat.prompts" />
                 </div>
               </div>
             </motion.aside>

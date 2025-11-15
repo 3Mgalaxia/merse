@@ -1,24 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, serverTimestamp, setDoc, Timestamp } from "firebase/firestore";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { firebaseFirestore } from "@/lib/firebase";
-
-type PlanKey = "free" | "pulse" | "nebula" | "supernova";
-
-type PlanConfig = {
-  key: PlanKey;
-  name: string;
-  limit: number;
-};
-
-const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
-  free: { key: "free", name: "Free Orbit", limit: 300 },
-  pulse: { key: "pulse", name: "Pulse Starter", limit: 900 },
-  nebula: { key: "nebula", name: "Nebula Studio", limit: 5000 },
-  supernova: { key: "supernova", name: "Supernova Pro", limit: 10000 },
-};
+import { PLAN_CONFIG, PlanKey, resolvePlanKey } from "@/lib/plans";
 
 type EnergySnapshot = {
   plan: PlanKey;
@@ -51,17 +37,6 @@ const STORAGE_KEY = "merse.energy";
 
 const EnergyContext = createContext<EnergyContextValue | undefined>(undefined);
 
-function resolvePlanKey(raw: unknown): PlanKey {
-  const value = typeof raw === "string" ? raw.toLowerCase() : "";
-  if (value in PLAN_CONFIG) {
-    return value as PlanKey;
-  }
-  if (value === "starter") return "free";
-  if (value === "pro") return "nebula";
-  if (value === "enterprise") return "supernova";
-  return "free";
-}
-
 function loadInitialState(): EnergySnapshot {
   if (typeof window === "undefined") {
     return { plan: "free", usage: 0 };
@@ -91,9 +66,9 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     merseImages: 0,
   });
   const hasLoadedRef = useRef(false);
-  const energyDocRef = useMemo(() => {
+  const userDocRef = useMemo(() => {
     if (!user || !firebaseFirestore) return null;
-    return doc(firebaseFirestore, "users", user.uid, "meta", "energy");
+    return doc(firebaseFirestore, "users", user.uid);
   }, [user]);
   const dailyUsageDocRef = useMemo(() => {
     if (!user || !firebaseFirestore) return null;
@@ -127,56 +102,77 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   }, [snapshot]);
 
   useEffect(() => {
-    if (!user || !firebaseFirestore) {
+    if (!userDocRef) {
       setSnapshot(loadInitialState());
       return;
     }
 
-    if (!energyDocRef) return;
-
-    const unsubscribe = onSnapshot(energyDocRef, (docSnapshot) => {
+    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
-        const data = docSnapshot.data() as Partial<EnergySnapshot>;
-        const resolved = resolvePlanKey(data.plan);
-        setSnapshot({
-          plan: forcedPlan ?? resolved,
-          usage: typeof data.usage === "number"
-            ? Math.min(data.usage, PLAN_CONFIG[forcedPlan ?? resolved].limit)
-            : 0,
-        });
-      } else {
-        const defaultState: EnergySnapshot = {
-          plan: forcedPlan ?? "free",
-          usage: 0,
+        const data = docSnapshot.data() as {
+          plan?: string;
+          credits?: number;
+          planExpiresAt?: Timestamp | Date | string | null;
         };
-        void setDoc(
-          energyDocRef,
-          { ...defaultState, updatedAt: serverTimestamp() },
-          { merge: true },
-        );
-        setSnapshot(defaultState);
-      }
-    });
+        const resolvedPlan = forcedPlan ?? resolvePlanKey(data.plan);
+        const limitValue = PLAN_CONFIG[resolvedPlan].limit;
+        const credits = typeof data.credits === "number" ? Math.max(0, data.credits) : limitValue;
 
-    return () => unsubscribe();
-  }, [user, energyDocRef, forcedPlan]);
+        const expiresAtValue = (() => {
+          const raw = data.planExpiresAt;
+          if (raw instanceof Timestamp) return raw.toDate();
+          if (raw instanceof Date) return raw;
+          if (typeof raw === "string") {
+            const parsed = new Date(raw);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+          }
+          if (raw && typeof (raw as { toDate?: () => Date }).toDate === "function") {
+            return (raw as { toDate: () => Date }).toDate();
+          }
+          return null;
+        })();
 
-  const persistSnapshot = useCallback(
-    (next: EnergySnapshot) => {
-      if (energyDocRef) {
+        const now = Date.now();
+        const isExpired =
+          resolvedPlan !== "free" && expiresAtValue ? expiresAtValue.getTime() < now : false;
+
+        if (isExpired && !forcedPlan) {
+          const freeLimit = PLAN_CONFIG.free.limit;
+          void setDoc(
+            userDocRef,
+            {
+              plan: "free",
+              credits: freeLimit,
+              planExpiresAt: null,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+          setSnapshot({ plan: "free", usage: 0 });
+          return;
+        }
+
+        const usageValue = Math.min(Math.max(limitValue - credits, 0), limitValue);
+        setSnapshot({ plan: resolvedPlan, usage: usageValue });
+      } else {
+        const basePlan = forcedPlan ?? "free";
+        const limitValue = PLAN_CONFIG[basePlan].limit;
         void setDoc(
-          energyDocRef,
+          userDocRef,
           {
-            plan: next.plan,
-            usage: next.usage,
+            plan: basePlan,
+            credits: limitValue,
+            generatedCount: 0,
             updatedAt: serverTimestamp(),
           },
           { merge: true },
         );
+        setSnapshot({ plan: basePlan, usage: 0 });
       }
-    },
-    [energyDocRef],
-  );
+    });
+
+    return () => unsubscribe();
+  }, [userDocRef, forcedPlan]);
 
   useEffect(() => {
     if (!user) {
@@ -228,15 +224,16 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   }, [user, dailyUsageDocRef, todayKey]);
 
   useEffect(() => {
-    if (forcedPlan && snapshot.plan !== forcedPlan) {
-      const next: EnergySnapshot = {
+    if (!forcedPlan || !userDocRef) return;
+    void setDoc(
+      userDocRef,
+      {
         plan: forcedPlan,
-        usage: Math.min(snapshot.usage, PLAN_CONFIG[forcedPlan].limit),
-      };
-      setSnapshot(next);
-      persistSnapshot(next);
-    }
-  }, [forcedPlan, snapshot, persistSnapshot]);
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }, [forcedPlan, userDocRef]);
 
   const planConfig = PLAN_CONFIG[snapshot.plan];
   const limit = planConfig.limit;
@@ -252,7 +249,6 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
         plan: key,
         usage: Math.min(PLAN_CONFIG[key].limit, prev.usage + amount),
       };
-      persistSnapshot(next);
       return next;
     });
   };
@@ -261,13 +257,25 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     if (forcedPlan && plan !== forcedPlan) {
       return;
     }
-    setSnapshot((prev) => {
-      const nextConfig = PLAN_CONFIG[plan];
-      const clampedUsage = Math.min(prev.usage, nextConfig.limit);
-      const next = { plan, usage: clampedUsage };
-      persistSnapshot(next);
-      return next;
-    });
+    if (!userDocRef) return;
+    const limitValue = PLAN_CONFIG[plan].limit;
+    const now = new Date();
+    const expiresAt =
+      plan === "free"
+        ? null
+        : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
+
+    void setDoc(
+      userDocRef,
+      {
+        plan,
+        credits: limitValue,
+        planActivatedAt: serverTimestamp(),
+        planExpiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : null,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
   };
 
   const canGenerateImage = useCallback(

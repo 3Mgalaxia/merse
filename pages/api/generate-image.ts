@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import OpenAI from "openai";
 
-let cachedReplicateVersion: string | null = null;
-let cachedReplicateModel: string | null = null;
+const replicateVersionCache = new Map<string, string>();
 
 export const config = {
   api: {
@@ -31,6 +30,42 @@ const openai = new OpenAI({
 });
 
 type Provider = "openai" | "flux" | "merse";
+
+type ReplicateProviderKey = Exclude<Provider, "openai">;
+
+type ReplicateProviderConfig = {
+  token?: string;
+  fallbackToken?: string;
+  model?: string;
+  defaultModel: string;
+  version?: string;
+  promptSuffix: string;
+  tokenEnvLabel: string;
+  modelEnvLabel: string;
+};
+
+const replicateProviderConfig: Record<ReplicateProviderKey, ReplicateProviderConfig> = {
+  flux: {
+    token: process.env.REPLICATE_FLUX_API_TOKEN,
+    fallbackToken: process.env.REPLICATE_API_TOKEN,
+    model: process.env.REPLICATE_FLUX_MODEL,
+    defaultModel: "3mgalaxia/merse-image-v1",
+    version: process.env.REPLICATE_FLUX_MODEL_VERSION,
+    promptSuffix: "Flux Studio - imagens rápidas com estética Merse econômica.",
+    tokenEnvLabel: "REPLICATE_FLUX_API_TOKEN",
+    modelEnvLabel: "REPLICATE_FLUX_MODEL",
+  },
+  merse: {
+    token: process.env.REPLICATE_MERSE_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+    fallbackToken: process.env.REPLICATE_API_TOKEN,
+    model: process.env.REPLICATE_MERSE_MODEL,
+    defaultModel: "3mgalaxia/merse-image-generator",
+    version: process.env.REPLICATE_MERSE_MODEL_VERSION,
+    promptSuffix: "Identidade Merse AI 1.0, brilho cósmico premium e partículas orbitais.",
+    tokenEnvLabel: "REPLICATE_MERSE_API_TOKEN",
+    modelEnvLabel: "REPLICATE_MERSE_MODEL",
+  },
+};
 
 type GenerationRequest = {
   prompt: string;
@@ -74,9 +109,7 @@ async function generateWithOpenAI({
       : "";
 
   const promptSuffix =
-    provider === "flux"
-      ? " | Estilo Flux experimental, mistura de texturas orgânicas e luz teatral difusa."
-      : " | Estilo Merse premium, microdetalhes nítidos e luz volumétrica.";
+    " | Estética OpenAI Vision, nitidez fotográfica, gradientes suaves e contraste equilibrado.";
 
   const requestPayload: OpenAI.ImageGenerateParams = {
     model: "gpt-image-1",
@@ -120,11 +153,11 @@ async function resolveReplicateVersion(token: string, model: string) {
   if (!response.ok) {
     const apiMessage = typeof json?.error?.message === "string" ? json.error.message : null;
     const guidance =
-      "Informe as variáveis REPLICATE_MERSE_MODEL e REPLICATE_MERSE_MODEL_VERSION no .env.local com o slug e a versão exata do modelo disponibilizado na Replicate.";
+      "Confirme o slug do modelo na Replicate e preencha as variáveis correspondentes no .env.local.";
     throw new Error(
       apiMessage
         ? `${apiMessage}. ${guidance}`
-        : `Não foi possível obter a versão padrão do modelo Merse na Replicate. ${guidance}`,
+        : `Não foi possível obter a versão padrão do modelo informado na Replicate. ${guidance}`,
     );
   }
 
@@ -136,48 +169,53 @@ async function resolveReplicateVersion(token: string, model: string) {
   return version;
 }
 
-async function generateWithReplicate({
-  prompt,
-  aspectRatio,
-  stylization,
-  count,
-  referenceImage,
-}: GenerationRequest) {
-  const token = process.env.REPLICATE_API_TOKEN;
-  const modelId = process.env.REPLICATE_MERSE_MODEL ?? "mersee/merse-ai-1-0";
-  let version = process.env.REPLICATE_MERSE_MODEL_VERSION;
-
+async function generateWithReplicateProvider(
+  request: GenerationRequest,
+  providerKey: ReplicateProviderKey,
+) {
+  const config = replicateProviderConfig[providerKey];
+  const token = (config.token ?? config.fallbackToken)?.trim();
   if (!token) {
-    throw new Error("Defina REPLICATE_API_TOKEN no .env.local para usar o motor Merse AI 1.0.");
+    throw new Error(
+      `Defina ${config.tokenEnvLabel} (ou REPLICATE_API_TOKEN) no .env.local para usar o provedor ${providerKey}.`,
+    );
   }
 
-  if (cachedReplicateVersion && cachedReplicateModel === modelId) {
-    version = cachedReplicateVersion;
-  } else if (!version || !version.trim()) {
-    version = await resolveReplicateVersion(token, modelId);
-    cachedReplicateVersion = version;
-    cachedReplicateModel = modelId;
+  const modelId = (config.model ?? config.defaultModel)?.trim();
+  if (!modelId) {
+    throw new Error(`Configure ${config.modelEnvLabel} no .env.local para apontar para o modelo da Replicate.`);
+  }
+
+  let version = config.version?.trim();
+  const cacheKey = `${providerKey}:${modelId}`;
+
+  if (!version) {
+    version = replicateVersionCache.get(cacheKey);
+    if (!version) {
+      version = await resolveReplicateVersion(token, modelId);
+      replicateVersionCache.set(cacheKey, version);
+    }
   } else {
-    cachedReplicateVersion = version;
-    cachedReplicateModel = modelId;
+    replicateVersionCache.set(cacheKey, version);
   }
 
-  const normalizedAspect = typeof aspectRatio === "string" ? aspectRatio.trim() : "1:1";
-  const cappedCount = Math.max(1, Math.min(Number.isFinite(count) ? Number(count) : 1, 4));
-  const guidance = typeof stylization === "number" ? Math.max(1, Math.min(15, stylization / 10 + 1)) : 1.5;
+  const normalizedAspect = typeof request.aspectRatio === "string" ? request.aspectRatio.trim() : "1:1";
+  const cappedCount = Math.max(1, Math.min(Number.isFinite(request.count) ? Number(request.count) : 1, 4));
+  const guidance =
+    typeof request.stylization === "number" ? Math.max(1, Math.min(15, request.stylization / 10 + 1)) : 1.5;
 
   const payload: Record<string, unknown> = {
     version,
     input: {
-      prompt: `${prompt.trim()} | Identidade Merse AI 1.0, brilho cósmico e partículas orbitais.`,
+      prompt: `${request.prompt.trim()} | ${config.promptSuffix}`,
       num_outputs: cappedCount,
       aspect_ratio: normalizedAspect || "1:1",
       guidance,
     },
   };
 
-  if (referenceImage) {
-    (payload.input as Record<string, unknown>).image = referenceImage;
+  if (request.referenceImage) {
+    (payload.input as Record<string, unknown>).image = request.referenceImage;
   }
 
   const predictionResponse = await fetch("https://api.replicate.com/v1/predictions", {
@@ -345,9 +383,9 @@ export default async function handler(
     };
 
     const response =
-      provider === "merse"
-        ? await generateWithReplicate(commonPayload)
-        : await generateWithOpenAI(commonPayload);
+      provider === "openai"
+        ? await generateWithOpenAI(commonPayload)
+        : await generateWithReplicateProvider(commonPayload, provider as ReplicateProviderKey);
 
     return res.status(200).json({ ...response, provider });
   } catch (error) {

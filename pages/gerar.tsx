@@ -15,6 +15,7 @@ import {
   PiMaskHappyFill,
   PiChatsFill,
   PiImageFill as PiImageFillIcon,
+  PiCodeFill,
 } from "react-icons/pi";
 
 const moduleIconMap = {
@@ -28,6 +29,7 @@ const moduleIconMap = {
   "gerar-foto": PiImageFillIcon,
   "criar-personagem": PiMaskHappyFill,
   chat: PiChatsFill,
+  "codex-studio": PiCodeFill,
 } as const;
 
 type ModuleKey = keyof typeof moduleIconMap;
@@ -162,6 +164,13 @@ const moduleBlocks: Array<{
     icon: "chat",
     accent: "from-blue-500/40 via-cyan-500/25 to-transparent",
   },
+  {
+    title: "Codex Studio",
+    href: "/codex-studio",
+    description: "Edite HTML com comandos em português e aplique a estética Merse instantaneamente.",
+    icon: "codex-studio",
+    accent: "from-purple-500/40 via-indigo-500/25 to-transparent",
+  },
 ];
 
 const promptPacks = [
@@ -244,6 +253,14 @@ const promptPacks = [
   },
 ];
 
+type PaymentMethod = "credit" | "pix" | "debit";
+
+const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+  { id: "credit", label: "Cartão de crédito" },
+  { id: "pix", label: "Pix instantâneo" },
+  { id: "debit", label: "Cartão de débito" },
+];
+
 export default function Gerar() {
   const [heroTile, ...secondaryTiles] = bannerTiles;
   const [selectedPack, setSelectedPack] = useState<(typeof promptPacks)[number] | null>(null);
@@ -251,6 +268,14 @@ export default function Gerar() {
   const [packIsProcessing, setPackIsProcessing] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
   const [packSuccess, setPackSuccess] = useState(false);
+  const [packPaymentMethod, setPackPaymentMethod] = useState<PaymentMethod>("credit");
+  const [packPixCheckout, setPackPixCheckout] = useState<{
+    qrCode: string;
+    qrCodeBase64?: string;
+    copyPasteCode?: string;
+    expiresAt?: string | null;
+  } | null>(null);
+  const [packPixCopyStatus, setPackPixCopyStatus] = useState<"idle" | "copied">("idle");
   const packCheckoutRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const [highlightStage, setHighlightStage] = useState<"idle" | "card" | "checkout">("idle");
@@ -273,6 +298,9 @@ export default function Gerar() {
     setShowPackCheckout(true);
     setPackError(null);
     setPackSuccess(false);
+    setPackPaymentMethod("credit");
+    setPackPixCheckout(null);
+    setPackPixCopyStatus("idle");
     setHighlightStage("card");
 
     highlightTimeoutRef.current = window.setTimeout(() => {
@@ -292,30 +320,58 @@ export default function Gerar() {
     };
 
     try {
-      setPackIsProcessing(true);
-      setPackError(null);
-      const response = await fetch("/api/payments/create-preference", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: `prompt-${selectedPack.id}`,
-          title: `Prompt Pack • ${selectedPack.title}`,
-          price: selectedPack.priceValue,
-          customer,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error ?? "Não foi possível iniciar o pagamento.");
-      }
-
-      const data = await response.json();
-      if (data.initPoint) {
-        window.location.href = data.initPoint as string;
+      if (packPaymentMethod === "pix") {
+        setPackIsProcessing(true);
+        setPackError(null);
+        setPackPixCheckout(null);
+        const response = await fetch("/api/payments/create-pix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: selectedPack.priceValue,
+            description: `Prompt Pack • ${selectedPack.title}`,
+            customer,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error ?? "Não foi possível gerar o QR Code Pix.");
+        }
+        setPackPixCheckout({
+          qrCode: data.qrCode,
+          qrCodeBase64: data.qrCodeBase64,
+          copyPasteCode: data.copyPasteCode,
+          expiresAt: data.expiresAt ?? null,
+        });
         setPackSuccess(true);
       } else {
-        setPackError("Preferência criada, mas o link de checkout não foi retornado.");
+        setPackIsProcessing(true);
+        setPackError(null);
+        const response = await fetch("/api/payments/create-preference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: `prompt-${selectedPack.id}`,
+            title: `Prompt Pack • ${selectedPack.title}`,
+            price: selectedPack.priceValue,
+            customer,
+            paymentMethod: packPaymentMethod,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error ?? "Não foi possível iniciar o pagamento.");
+        }
+
+        const data = await response.json();
+        const initPoint = (data.init_point ?? data.initPoint) as string | undefined;
+        if (initPoint) {
+          window.location.href = initPoint;
+          setPackSuccess(true);
+        } else {
+          setPackError("Preferência criada, mas o link de checkout não foi retornado.");
+        }
       }
     } catch (error) {
       setPackError(error instanceof Error ? error.message : "Erro inesperado ao iniciar o checkout.");
@@ -329,6 +385,9 @@ export default function Gerar() {
     setSelectedPack(null);
     setPackError(null);
     setPackSuccess(false);
+    setPackPixCheckout(null);
+    setPackPixCopyStatus("idle");
+    setPackPaymentMethod("credit");
     setHighlightStage("idle");
     if (highlightTimeoutRef.current) {
       window.clearTimeout(highlightTimeoutRef.current);
@@ -602,6 +661,29 @@ export default function Gerar() {
                 Cancelar
               </button>
             </div>
+            <div className="mb-6 flex flex-wrap gap-2">
+              {PAYMENT_METHODS.map((method) => {
+                const isActive = packPaymentMethod === method.id;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => {
+                      setPackPaymentMethod(method.id);
+                      setPackPixCheckout(null);
+                      setPackPixCopyStatus("idle");
+                    }}
+                    className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] transition ${
+                      isActive
+                        ? "border-purple-300/60 bg-purple-500/20 text-white"
+                        : "border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:text-white"
+                    }`}
+                  >
+                    {method.label}
+                  </button>
+                );
+              })}
+            </div>
           <form className="grid gap-5 md:grid-cols-2" onSubmit={handlePackCheckoutSubmit}>
             <label className="flex flex-col gap-2">
               <span className="text-xs uppercase tracking-[0.25em] text-white">Nome completo</span>
@@ -633,6 +715,21 @@ export default function Gerar() {
                 Aceito receber o pacote por e-mail e entendo que o pagamento é processado via Mercado Pago.
               </span>
             </label>
+            {packPaymentMethod === "pix" && (
+              <p className="md:col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+                Selecionando Pix, exibiremos o QR Code para pagamento imediato. O pack fica disponível
+                no seu e-mail assim que o Mercado Pago confirmar.
+              </p>
+            )}
+            <div className="md:col-span-2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs text-white/70">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-white/55">
+                Pagamento selecionado:{" "}
+                <span className="text-white">{PAYMENT_METHODS.find((m) => m.id === packPaymentMethod)?.label}</span>
+              </p>
+              <p className="text-[11px] text-white/60">
+                Todas as transações passam pelo Mercado Pago usando as credenciais oficiais da Merse.
+              </p>
+            </div>
             <div className="md:col-span-2 flex items-center justify-between">
               <div className="text-xs uppercase tracking-[0.3em] text-white/60">
                 Valor total: <span className="text-white/90">{selectedPack.priceLabel}</span>
@@ -656,6 +753,50 @@ export default function Gerar() {
               </p>
             )}
           </form>
+          {packPixCheckout && (
+            <div className="mt-6 grid gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-6 text-white/80">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">Pix ativo</p>
+                  <p className="text-sm text-white">Escaneie o QR Code para finalizar a compra.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!packPixCheckout.copyPasteCode) return;
+                    try {
+                      await navigator.clipboard.writeText(packPixCheckout.copyPasteCode);
+                      setPackPixCopyStatus("copied");
+                      setTimeout(() => setPackPixCopyStatus("idle"), 2000);
+                    } catch {
+                      setPackPixCopyStatus("idle");
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-[11px] uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  {packPixCopyStatus === "copied" ? "Copiado" : "Copiar código"}
+                </button>
+              </div>
+              {packPixCheckout.qrCodeBase64 ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/40 p-4">
+                  <img
+                    src={`data:image/png;base64,${packPixCheckout.qrCodeBase64}`}
+                    alt="QR Code Pix"
+                    className="h-52 w-52 rounded-xl border border-white/15 bg-white p-3"
+                  />
+                  <p className="text-xs text-white/60">
+                    {packPixCheckout.expiresAt
+                      ? `Expira em ${new Date(packPixCheckout.expiresAt).toLocaleString()}`
+                      : "Utilize o QR Code em até 15 minutos."}
+                  </p>
+                </div>
+              ) : (
+                <pre className="overflow-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-xs">
+                  {packPixCheckout.copyPasteCode}
+                </pre>
+              )}
+            </div>
+          )}
         </motion.section>
       )}
       </AnimatePresence>

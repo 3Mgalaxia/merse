@@ -88,12 +88,28 @@ const tiers: TierInfo[] = [
   },
 ];
 
+type PaymentMethod = "credit" | "pix" | "debit";
+
+const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+  { id: "credit", label: "Cartão de crédito" },
+  { id: "pix", label: "Pix instantâneo" },
+  { id: "debit", label: "Cartão de débito" },
+];
+
 export default function Planos() {
   const { setPlan, plan } = useEnergy();
   const [selectedTier, setSelectedTier] = useState<TierInfo | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("credit");
+  const [pixCheckout, setPixCheckout] = useState<{
+    qrCode: string;
+    qrCodeBase64?: string;
+    copyPasteCode?: string;
+    expiresAt?: string | null;
+  } | null>(null);
+  const [pixCopyStatus, setPixCopyStatus] = useState<"idle" | "copied">("idle");
   const checkoutSectionRef = useRef<HTMLDivElement | null>(null);
 
   const selectedTierInfo = useMemo(() => {
@@ -111,6 +127,9 @@ export default function Planos() {
     }
     setShowCheckout(true);
     setCheckoutError(null);
+    setSelectedPaymentMethod("credit");
+    setPixCheckout(null);
+    setPixCopyStatus("idle");
   };
 
   useEffect(() => {
@@ -130,7 +149,7 @@ export default function Planos() {
       plan: selectedTierInfo.planKey,
       price: selectedTierInfo.priceValue,
       customer: {
-        name: formData.get("cardName"),
+        name: formData.get("buyerName"),
         email: formData.get("email"),
         document: formData.get("document"),
         zip: formData.get("zip"),
@@ -146,6 +165,46 @@ export default function Planos() {
       }
       setShowCheckout(false);
       setSelectedTier(null);
+      setPixCheckout(null);
+      setPixCopyStatus("idle");
+      setSelectedPaymentMethod("credit");
+      return;
+    }
+
+    if (selectedPaymentMethod === "pix") {
+      try {
+        setIsProcessing(true);
+        setCheckoutError(null);
+        setPixCheckout(null);
+        const response = await fetch("/api/payments/create-pix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: selectedTierInfo.priceValue,
+            description: selectedTierInfo.title,
+            customer: {
+              name: payload.customer.name,
+              email: payload.customer.email,
+            },
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error ?? "Não foi possível gerar o QR Code Pix.");
+        }
+
+        setPixCheckout({
+          qrCode: data.qrCode,
+          qrCodeBase64: data.qrCodeBase64,
+          copyPasteCode: data.copyPasteCode,
+          expiresAt: data.expiresAt ?? null,
+        });
+      } catch (error) {
+        setCheckoutError(error instanceof Error ? error.message : "Falha ao gerar Pix.");
+      } finally {
+        setIsProcessing(false);
+      }
       return;
     }
 
@@ -160,6 +219,7 @@ export default function Planos() {
           title: selectedTierInfo.title,
           price: selectedTierInfo.priceValue,
           customer: payload.customer,
+          paymentMethod: selectedPaymentMethod,
         }),
       });
 
@@ -169,11 +229,9 @@ export default function Planos() {
       }
 
       const data = await response.json();
-      if (selectedTierInfo.planKey) {
-        setPlan(selectedTierInfo.planKey);
-      }
-      if (data.initPoint) {
-        window.location.href = data.initPoint as string;
+      const initPoint = (data.init_point ?? data.initPoint) as string | undefined;
+      if (initPoint) {
+        window.location.href = initPoint;
       } else {
         setCheckoutError("Preferência criada, mas não foi possível abrir o checkout.");
       }
@@ -195,6 +253,10 @@ export default function Planos() {
             <p className="mt-3 max-w-2xl text-sm text-slate-300">
               Atualize sua nave para desbloquear limites de energia maiores, automações avançadas e
               suporte de primeira linha. Os planos podem ser alterados a qualquer momento.
+            </p>
+            <p className="mt-2 text-xs text-white/60">
+              Todos os planos são mensais: ao confirmar o pagamento, o crédito fica ativo por 30 dias. Caso
+              o pagamento não seja identificado no próximo ciclo, retornamos automaticamente para o plano Free.
             </p>
           </div>
           <Link
@@ -317,6 +379,9 @@ export default function Planos() {
                   setShowCheckout(false);
                   setSelectedTier(null);
                   setCheckoutError(null);
+                  setPixCheckout(null);
+                  setPixCopyStatus("idle");
+                  setSelectedPaymentMethod("credit");
                 }}
                 className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white transition hover:border-white/40 hover:bg-white/20"
               >
@@ -324,53 +389,86 @@ export default function Planos() {
               </button>
             </div>
 
+            <div className="mb-6 flex flex-wrap gap-2">
+              {PAYMENT_METHODS.map((method) => {
+                const isActive = selectedPaymentMethod === method.id;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentMethod(method.id);
+                      setPixCheckout(null);
+                      setPixCopyStatus("idle");
+                    }}
+                    className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] transition ${
+                      isActive
+                        ? "border-purple-300/60 bg-purple-500/20 text-white"
+                        : "border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:text-white"
+                    }`}
+                  >
+                    {method.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <form className="grid gap-5 md:grid-cols-2" onSubmit={handleCheckoutSubmit}>
               <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.25em] text-white">Nome no cartão</span>
+                <span className="text-xs uppercase tracking-[0.25em] text-white">
+                  Nome completo
+                </span>
                 <input
                   type="text"
-                  name="cardName"
+                  name="buyerName"
                   className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
                   placeholder="Ex.: Alex T. Merse"
                   required
                 />
               </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.25em] text-white">Número do cartão</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={19}
-                  name="cardNumber"
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
-                  placeholder="0000 0000 0000 0000"
-                  required
-                />
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.25em] text-white">Validade</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  name="cardExpiry"
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
-                  placeholder="MM/AA"
-                  required
-                />
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.25em] text-white">CVV</span>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  name="cardCvv"
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
-                  placeholder="***"
-                  required
-                />
-              </label>
+              {selectedPaymentMethod !== "pix" && (
+                <>
+                  <label className="flex flex-col gap-2">
+                    <span className="text-xs uppercase tracking-[0.25em] text-white">
+                      Número do cartão
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={19}
+                      name="cardNumber"
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                      placeholder="0000 0000 0000 0000"
+                      required={selectedPaymentMethod !== "pix"}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    <span className="text-xs uppercase tracking-[0.25em] text-white">Validade</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={5}
+                      name="cardExpiry"
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                      placeholder="MM/AA"
+                      required={selectedPaymentMethod !== "pix"}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    <span className="text-xs uppercase tracking-[0.25em] text-white">CVV</span>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      name="cardCvv"
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
+                      placeholder="***"
+                      required={selectedPaymentMethod !== "pix"}
+                    />
+                  </label>
+                </>
+              )}
+
               <label className="flex flex-col gap-2">
                 <span className="text-xs uppercase tracking-[0.25em] text-white">CPF / CNPJ</span>
                 <input
@@ -423,6 +521,28 @@ export default function Planos() {
                   required
                 />
               </label>
+              <div className="md:col-span-2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs text-white/70">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-white/55">Formas de pagamento</p>
+                <div className="flex flex-wrap gap-2 text-white">
+                  {["Cartão de crédito", "Pix instantâneo", "Cartão de débito"].map((method) => (
+                    <span
+                      key={method}
+                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.25em]"
+                    >
+                      {method}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-white/60">
+                  Processado via Mercado Pago com as novas credenciais ativas — link seguro é aberto após a confirmação.
+                </p>
+              </div>
+              {selectedPaymentMethod === "pix" && (
+                <p className="md:col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+                  Ao confirmar, geramos o QR Code Pix para este plano. Escaneie com seu banco e aguarde a
+                  confirmação automática da Merse (plano válido por 30 dias).
+                </p>
+              )}
               <div className="md:col-span-2 flex items-center justify-between">
                 <label className="flex items-center gap-2 text-xs text-white/70">
                   <input type="checkbox" required className="h-4 w-4 rounded border border-white/40 bg-black/40" />
@@ -442,6 +562,51 @@ export default function Planos() {
                 </p>
               )}
             </form>
+
+            {pixCheckout && (
+              <div className="mt-6 grid gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-6 text-white/80">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">Pix ativo</p>
+                    <p className="text-sm text-white">Escaneie o QR Code para concluir o pagamento.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!pixCheckout.copyPasteCode) return;
+                      try {
+                        await navigator.clipboard.writeText(pixCheckout.copyPasteCode);
+                        setPixCopyStatus("copied");
+                        setTimeout(() => setPixCopyStatus("idle"), 2000);
+                      } catch {
+                        setPixCopyStatus("idle");
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-[11px] uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  >
+                    {pixCopyStatus === "copied" ? "Copiado" : "Copiar código"}
+                  </button>
+                </div>
+                {pixCheckout.qrCodeBase64 ? (
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/40 p-4">
+                    <img
+                      src={`data:image/png;base64,${pixCheckout.qrCodeBase64}`}
+                      alt="QR Code Pix"
+                      className="h-52 w-52 rounded-xl border border-white/15 bg-white p-3"
+                    />
+                    <p className="text-xs text-white/60">
+                      {pixCheckout.expiresAt
+                        ? `Expira em ${new Date(pixCheckout.expiresAt).toLocaleString()}`
+                        : "Expira em alguns minutos."}
+                    </p>
+                  </div>
+                ) : (
+                  <pre className="overflow-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-xs">
+                    {pixCheckout.copyPasteCode}
+                  </pre>
+                )}
+              </div>
+            )}
           </section>
         )}
       </main>

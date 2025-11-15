@@ -19,6 +19,7 @@ import {
   appleProvider,
   firebaseEnabled,
 } from "@/lib/firebase";
+import { ensureUserCreditProfile } from "@/lib/credits";
 
 type AuthUser = {
   uid: string;
@@ -67,6 +68,7 @@ async function ensureUserDocument(user: User, extra?: { displayName?: string }) 
     },
     { merge: true },
   );
+  await ensureUserCreditProfile(user.uid);
 }
 
 const disableFirebaseAuth =

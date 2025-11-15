@@ -1,10 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import OpenAI from "openai";
 
+import { injectEffectStyles } from "@/lib/effects";
+import { injectPaletteStyles, buildImagePrompt, PaletteColors, injectAnimationHtml } from "@/lib/siteEnhancers";
+import { applyRateLimit } from "@/lib/rateLimit";
+import { logApiAction } from "@/lib/logger";
+
 type WebsiteCodePayload = {
   summary: string;
   highlights: string[];
   html: string;
+  imageUrl?: string;
+  effect?: EffectBrief | null;
+  animation?: Pick<AnimationBrief, "id" | "label"> | null;
 };
 
 type LayoutBrief = {
@@ -13,13 +21,25 @@ type LayoutBrief = {
   description?: string;
   objective?: string;
   highlights?: string[];
-  referenceImage?: string;
 };
 
 type PaletteBrief = {
   id?: string;
   label?: string;
   preview?: string;
+};
+
+type EffectBrief = {
+  id?: string;
+  name?: string;
+  intensity?: number;
+};
+
+type AnimationBrief = {
+  id?: string;
+  label?: string;
+  description?: string;
+  html?: string;
 };
 
 type SuccessResponse = { website: WebsiteCodePayload };
@@ -31,26 +51,172 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL,
 });
 
+const IMAGE_MODEL = (process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1").trim();
+
+async function generateHeroImage(prompt: string) {
+  try {
+    const response = await openai.images.generate({
+      model: IMAGE_MODEL || "gpt-image-1",
+      prompt,
+      n: 1,
+      size: "1024x768",
+      quality: "high",
+    });
+
+    const generated = response.data?.[0];
+    const url = generated?.url ?? (generated?.b64_json ? `data:image/png;base64,${generated.b64_json}` : null);
+    return url ?? null;
+  } catch (error) {
+    console.error("Falha ao gerar imagem do site:", error);
+    return null;
+  }
+}
+
+function injectHeroSection(html: string, imageUrl: string, siteName: string) {
+  if (!imageUrl) return html;
+
+  const heroMarkup = `
+    <section class="merse-generated-hero">
+      <div class="merse-hero-media" role="img" aria-label="Visual gerado automaticamente para ${siteName}">
+        <img src="${imageUrl}" alt="Visual conceitual do site ${siteName}" loading="lazy" />
+        <div class="merse-hero-gradient"></div>
+      </div>
+      <div class="merse-hero-caption">
+        <p>Visual gerado pela Merse a partir do briefing.</p>
+      </div>
+    </section>
+  `;
+
+  const heroStyles = `
+    <style>
+      .merse-generated-hero {
+        position: relative;
+        border-radius: 32px;
+        overflow: hidden;
+        margin: 2rem auto;
+        max-width: 1200px;
+        box-shadow: 0 30px 120px rgba(84, 0, 255, 0.35);
+      }
+      .merse-hero-media {
+        position: relative;
+        min-height: 360px;
+        background: radial-gradient(circle at top, rgba(168,85,247,0.3), rgba(2,2,8,0.9));
+      }
+      .merse-hero-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        filter: saturate(1.05);
+      }
+      .merse-hero-gradient {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(2,2,8,0.15), rgba(2,2,8,0.85));
+      }
+      .merse-hero-caption {
+        position: absolute;
+        bottom: 1.5rem;
+        left: 2rem;
+        right: 2rem;
+        color: white;
+        font-size: 0.85rem;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      @media (max-width: 768px) {
+        .merse-hero-caption {
+          flex-direction: column;
+          gap: 0.5rem;
+          letter-spacing: 0.25em;
+        }
+      }
+    </style>
+  `;
+
+  let output = html;
+  if (html.includes("</head>")) {
+    output = html.replace("</head>", `${heroStyles}</head>`);
+  } else {
+    output = heroStyles + output;
+  }
+
+  const bodyOpenMatch = output.match(/<body[^>]*>/i);
+  if (bodyOpenMatch && bodyOpenMatch[0]) {
+    return output.replace(bodyOpenMatch[0], `${bodyOpenMatch[0]}${heroMarkup}`);
+  }
+
+  return `${heroMarkup}${output}`;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
+  const startedAt = Date.now();
+  const userIdHeader = Array.isArray(req.headers["x-merse-uid"])
+    ? req.headers["x-merse-uid"][0]
+    : req.headers["x-merse-uid"];
+  const userId = typeof userIdHeader === "string" && userIdHeader.length > 0 ? userIdHeader : undefined;
+  const clientIp =
+    (Array.isArray(req.headers["x-forwarded-for"])
+      ? req.headers["x-forwarded-for"][0]
+      : req.headers["x-forwarded-for"]) ||
+    req.socket.remoteAddress ||
+    "unknown";
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Método não suportado." });
+  }
+
+  const rateKey = `generate-website:${userId ?? clientIp}`;
+  const rate = applyRateLimit(rateKey, 10, 60_000);
+  if (!rate.allowed) {
+    await logApiAction({
+      action: "generate-website",
+      userId,
+      status: 429,
+      durationMs: Date.now() - startedAt,
+      metadata: { reason: "rate_limited", retryAfter: rate.retryAfter },
+    });
+    return res.status(429).json({
+      error: "Muitas solicitações. Aguarde alguns segundos antes de tentar novamente.",
+      details: { retryAfter: rate.retryAfter },
+    });
   }
 
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: "Chave da OpenAI não configurada no servidor." });
   }
 
-  const { siteName, goal, menu, layout, palette, modules, notes, heroMood } = req.body;
+const {
+    siteName,
+    goal,
+    menu,
+    layout,
+    palette,
+    modules,
+    notes,
+    heroMood,
+    rawBrief,
+    effect,
+    animation,
+    structureOnly = false,
+    paletteColors,
+    paletteDescription,
+  } = req.body;
 
   if (!siteName || typeof siteName !== "string") {
     return res.status(400).json({ error: "Informe o nome do site." });
   }
 
   try {
+    const paletteColorConfig = (paletteColors ?? {}) as PaletteColors;
+
     const layoutInfo: LayoutBrief =
       layout && typeof layout === "object"
         ? layout
@@ -64,6 +230,16 @@ export default async function handler(
         ? palette
         : { id: palette, label: palette, preview: "" };
 
+    const animationInfo: AnimationBrief | null =
+      animation && typeof animation === "object"
+        ? {
+            id: typeof animation.id === "string" ? animation.id : undefined,
+            label: typeof animation.label === "string" ? animation.label : undefined,
+            description: typeof animation.description === "string" ? animation.description : undefined,
+            html: typeof animation.html === "string" ? animation.html : undefined,
+          }
+        : null;
+
     const normalizedModules = Array.isArray(modules)
       ? modules.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
       : [];
@@ -74,7 +250,6 @@ export default async function handler(
       Array.isArray(layoutInfo?.highlights) && layoutInfo.highlights.length
         ? `Pontos-chave:\n${layoutInfo.highlights.map((item: string) => `- ${item}`).join("\n")}`
         : null,
-      layoutInfo?.referenceImage ? `Referência visual hospedada na Merse: ${layoutInfo.referenceImage}` : null,
       normalizedModules.length ? `Módulos solicitados: ${normalizedModules.join(", ")}.` : null,
       paletteInfo?.label
         ? `Paleta sugerida: ${paletteInfo.label}${
@@ -84,7 +259,24 @@ export default async function handler(
       typeof heroMood === "string" && heroMood.trim()
         ? `Mood desejado para o hero: ${heroMood.trim()}.`
         : null,
+      paletteColorConfig?.primary || paletteColorConfig?.secondary || paletteColorConfig?.accent
+        ? `Cores definidas manualmente: ${[
+            paletteColorConfig?.primary,
+            paletteColorConfig?.secondary,
+            paletteColorConfig?.accent,
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : null,
+      typeof paletteDescription === "string" && paletteDescription.trim()
+        ? `Descrição das cores predominantes: ${paletteDescription.trim()}.`
+        : null,
       typeof notes === "string" && notes.trim() ? `Observações extras: ${notes.trim()}.` : null,
+      effect?.id ? `Efeito visual: ${effect.name ?? effect.id} (intensidade ${effect.intensity ?? "default"}).` : null,
+      animationInfo?.label ? `Animação de fundo escolhida: ${animationInfo.label}.` : null,
+      typeof rawBrief === "string" && rawBrief.trim()
+        ? `Briefing livre enviado pelo usuário:\n${rawBrief.trim()}`
+        : null,
     ]
       .filter(Boolean)
       .join("\n");
@@ -99,6 +291,11 @@ export default async function handler(
         modules: normalizedModules,
         notes,
         heroMood,
+        rawBrief,
+        effect,
+        animation: animationInfo
+          ? { id: animationInfo.id, label: animationInfo.label, description: animationInfo.description }
+          : null,
       },
       null,
       2
@@ -183,6 +380,63 @@ export default async function handler(
       throw parseError;
     }
 
+    if (website?.html) {
+      website.html = injectPaletteStyles(website.html, paletteColorConfig);
+
+      if (!structureOnly) {
+      const imagePrompt = buildImagePrompt({
+        siteName,
+        goal,
+        layout: layoutInfo,
+        palette: paletteInfo,
+        heroMood,
+        notes,
+        rawBrief,
+        paletteDescription,
+      });
+
+        const heroImageUrl = await generateHeroImage(imagePrompt);
+
+        if (heroImageUrl) {
+          website.imageUrl = heroImageUrl;
+          website.html = injectHeroSection(website.html, heroImageUrl, siteName);
+        }
+      }
+
+      if (effect?.id) {
+        website.effect = effect;
+        website.html = injectEffectStyles(website.html, effect.id, effect.intensity);
+      }
+
+      if (animationInfo?.id && animationInfo.html) {
+        website.animation = {
+          id: animationInfo.id,
+          label: animationInfo.label ?? animationInfo.id,
+        };
+        website.html = injectAnimationHtml(website.html, animationInfo.id, animationInfo.html);
+      } else if (animationInfo?.id) {
+        website.animation = {
+          id: animationInfo.id,
+          label: animationInfo.label ?? animationInfo.id,
+        };
+      }
+    }
+
+    await logApiAction({
+      action: "generate-website",
+      userId,
+      status: 200,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        siteName,
+        modules: normalizedModules.length,
+        hasImage: Boolean(website.imageUrl),
+        effectId: effect?.id ?? null,
+        animationId: animationInfo?.id ?? null,
+        structureOnly: Boolean(structureOnly),
+      },
+    });
+
     return res.status(200).json({ website });
   } catch (error) {
     console.error("Erro ao gerar código com OpenAI:", error);
@@ -190,6 +444,14 @@ export default async function handler(
       error instanceof Error
         ? error.message
         : "Não foi possível gerar o código agora. Tente novamente.";
+
+    await logApiAction({
+      action: "generate-website",
+      userId,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      metadata: { error: message },
+    });
     return res.status(500).json({ error: message });
   }
 }

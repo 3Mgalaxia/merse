@@ -48,6 +48,14 @@ const CATEGORY_PRICING: Record<
   },
 };
 
+type PaymentMethod = "credit" | "pix" | "debit";
+
+const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+  { id: "credit", label: "Cartão de crédito" },
+  { id: "pix", label: "Pix instantâneo" },
+  { id: "debit", label: "Cartão de débito" },
+];
+
 function normalizeCategory(category: string) {
   return category
     .normalize("NFD")
@@ -78,6 +86,14 @@ export default function Ranking() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
+  const [pixCheckout, setPixCheckout] = useState<{
+    qrCode: string;
+    qrCodeBase64?: string;
+    copyPasteCode?: string;
+    expiresAt?: string | null;
+  } | null>(null);
+  const [pixCopyStatus, setPixCopyStatus] = useState<"idle" | "copied">("idle");
   const checkoutRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -122,6 +138,9 @@ export default function Ranking() {
     setShowCheckout(true);
     setCheckoutError(null);
     setCheckoutSuccess(false);
+    setPaymentMethod("credit");
+    setPixCheckout(null);
+    setPixCopyStatus("idle");
   };
 
   const handleCheckoutSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -137,6 +156,41 @@ export default function Ranking() {
       email: (formData.get("buyerEmail") as string | null) ?? "",
     };
 
+    if (paymentMethod === "pix") {
+      try {
+        setIsProcessing(true);
+        setCheckoutError(null);
+        setPixCheckout(null);
+        const response = await fetch("/api/payments/create-pix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: pricing.priceValue,
+            description: `Prompt • ${selectedEntry.name}`,
+            customer,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error ?? "Não foi possível gerar o QR Code Pix.");
+        }
+        setPixCheckout({
+          qrCode: data.qrCode,
+          qrCodeBase64: data.qrCodeBase64,
+          copyPasteCode: data.copyPasteCode,
+          expiresAt: data.expiresAt ?? null,
+        });
+        setCheckoutSuccess(true);
+      } catch (err) {
+        setCheckoutError(
+          err instanceof Error ? err.message : "Erro inesperado ao gerar Pix.",
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
     try {
       setIsProcessing(true);
       setCheckoutError(null);
@@ -148,6 +202,7 @@ export default function Ranking() {
           title: `Prompt • ${selectedEntry.name}`,
           price: pricing.priceValue,
           customer,
+          paymentMethod,
         }),
       });
 
@@ -157,8 +212,9 @@ export default function Ranking() {
       }
 
       const data = await response.json();
-      if (data.initPoint) {
-        window.location.href = data.initPoint as string;
+      const initPoint = (data.init_point ?? data.initPoint) as string | undefined;
+      if (initPoint) {
+        window.location.href = initPoint;
         setCheckoutSuccess(true);
       } else {
         setCheckoutError("Preferência criada, mas o link do checkout não foi retornado.");
@@ -177,6 +233,9 @@ export default function Ranking() {
     setSelectedEntry(null);
     setCheckoutError(null);
     setCheckoutSuccess(false);
+    setPixCheckout(null);
+    setPixCopyStatus("idle");
+    setPaymentMethod("credit");
   };
 
   return (
@@ -467,7 +526,29 @@ export default function Ranking() {
               Cancelar
             </button>
           </div>
-
+          <div className="mb-6 flex flex-wrap gap-2">
+            {PAYMENT_METHODS.map((method) => {
+              const isActive = paymentMethod === method.id;
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod(method.id);
+                    setPixCheckout(null);
+                    setPixCopyStatus("idle");
+                  }}
+                  className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] transition ${
+                    isActive
+                      ? "border-purple-300/60 bg-purple-500/20 text-white"
+                      : "border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:text-white"
+                  }`}
+                >
+                  {method.label}
+                </button>
+              );
+            })}
+          </div>
           <form className="grid gap-5 md:grid-cols-2" onSubmit={handleCheckoutSubmit}>
             <label className="flex flex-col gap-2">
               <span className="text-xs uppercase tracking-[0.25em] text-white">Nome</span>
@@ -489,6 +570,39 @@ export default function Ranking() {
                 required
               />
             </label>
+            {paymentMethod === "pix" && (
+              <p className="md:col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+                Vamos gerar um QR Code Pix exclusivo para este prompt. Após o pagamento, mantenha o
+                comprovante — o acesso fica associado ao seu e-mail durante todo o mês.
+              </p>
+            )}
+            <div className="md:col-span-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/60">
+              <span>
+                Valor total:{" "}
+                <span className="text-white/90">
+                  {
+                    CATEGORY_PRICING[normalizeCategory(selectedEntry.category)]?.priceLabel ??
+                    "US$ 1"
+                  }
+                </span>
+              </span>
+            </div>
+            <div className="md:col-span-2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs text-white/70">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-white/55">Formas de pagamento</p>
+              <div className="flex flex-wrap gap-2 text-white">
+                {["Cartão", "Pix", "Débito"].map((method) => (
+                  <span
+                    key={method}
+                    className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.25em]"
+                  >
+                    {method}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-white/60">
+                Checkout seguro via Mercado Pago com as chaves atualizadas para esta conta Merse.
+              </p>
+            </div>
             <div className="md:col-span-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/60">
               <span>
                 Valor total:{" "}
@@ -518,6 +632,53 @@ export default function Ranking() {
               </p>
             )}
           </form>
+
+          {pixCheckout && (
+            <div className="mt-6 grid gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-6 text-white/80">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">Pix ativo</p>
+                  <p className="text-sm text-white">
+                    Escaneie o QR Code para finalizar a licença deste prompt.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!pixCheckout.copyPasteCode) return;
+                    try {
+                      await navigator.clipboard.writeText(pixCheckout.copyPasteCode);
+                      setPixCopyStatus("copied");
+                      setTimeout(() => setPixCopyStatus("idle"), 2000);
+                    } catch {
+                      setPixCopyStatus("idle");
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-[11px] uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  {pixCopyStatus === "copied" ? "Copiado" : "Copiar código"}
+                </button>
+              </div>
+              {pixCheckout.qrCodeBase64 ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/40 p-4">
+                  <img
+                    src={`data:image/png;base64,${pixCheckout.qrCodeBase64}`}
+                    alt="QR Code Pix"
+                    className="h-52 w-52 rounded-xl border border-white/15 bg-white p-3"
+                  />
+                  <p className="text-xs text-white/60">
+                    {pixCheckout.expiresAt
+                      ? `Expira em ${new Date(pixCheckout.expiresAt).toLocaleString()}`
+                      : "Use este QR Code em até 15 minutos."}
+                  </p>
+                </div>
+              ) : (
+                <pre className="overflow-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-xs">
+                  {pixCheckout.copyPasteCode}
+                </pre>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>

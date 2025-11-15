@@ -1,14 +1,20 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   PiBrowsersFill,
-  PiListChecksFill,
   PiPaletteFill,
   PiSparkleFill,
   PiStarFourFill,
   PiUploadSimpleFill,
+  PiQuestionFill,
+  PiPaperPlaneTiltFill,
+  PiXBold,
+  PiCopySimpleFill,
+  PiCheckBold,
 } from "react-icons/pi";
 import { useEnergy } from "@/contexts/EnergyContext";
+import PromptChat from "@/components/PromptChat";
 
 type LayoutPreset = {
   id: string;
@@ -19,50 +25,54 @@ type LayoutPreset = {
   details: string[];
 };
 
+type AnimationPreset = {
+  id: string;
+  label: string;
+  description: string;
+  html: string;
+};
+
 const LAYOUT_PRESETS: LayoutPreset[] = [
   {
-    id: "cosmic-landing",
-    label: "Galaxy Landing",
-    description: "Hero cinematográfico, CTA dupla, galeria animada.",
+    id: "code-only",
+    label: "Estrutura em Código",
+    description: "Gera apenas HTML + CSS Merse.",
     hero: "/banners/Merse-4.png",
-    objective: "Impactar visualmente e converter.",
+    objective: "Criar a base rapidamente e personalizar depois.",
     details: [
-      "Layout ideal para landing pages que precisam causar impacto imediato.",
-      "Hero cinematográfico com vídeo ou visual 3D, slogan memorável e transições suaves.",
-      "Dois CTAs principais orientando o visitante para explorar e converter.",
-      "Galeria animada com exemplos do produto, recursos ou resultados.",
-      "Padrões visuais com fortes contrastes, partículas de luz e blocos verticais.",
-      "Recomendado para lançamentos, pitches e produtos futuristas.",
+      "Somente estrutura: seções, CTA e grid responsivo em código puro.",
+      "Ideal para quem quer exportar o HTML e integrar manualmente.",
+      "Aplica automaticamente o tema dark cósmico e a paleta escolhida.",
+      "Não chama motores de IA — resultado instantâneo.",
+      "Serve como blueprint inicial antes de adicionar mídia.",
     ],
   },
   {
-    id: "dashboard",
-    label: "Portal Operacional",
-    description: "Dashboard modular com cards e timeline viva.",
+    id: "image-hero",
+    label: "Site + Imagem IA",
+    description: "Cria o site e gera o hero com IA.",
     hero: "/banners/Merse-3.png",
-    objective: "Funcionalidade e controle.",
+    objective: "Adicionar impacto visual sem sair do fluxo.",
     details: [
-      "Cria uma central de comando para plataformas de IA ou hubs de produtividade.",
-      "Cards modulares exibindo métricas, status de geração e ações rápidas.",
-      "Timeline com histórico vivo de atividades, entradas ou resultados.",
-      "Organização em grade, interações claras e foco no fluxo operacional.",
-      "Visual translúcido com elementos glassmorphism e animações ao passar o mouse.",
-      "Indicada para áreas logadas, painéis administrativos e experiências responsivas multitarefa.",
+      "Depois que a estrutura estiver pronta, o hero é gerado via OpenAI.",
+      "Mantém as cores e o efeito escolhidos automaticamente.",
+      "Indicado para landing pages que precisam de banner estilizado.",
+      "Processo guiado: gera primeiro o código, depois a imagem.",
+      "Permite refazer o hero quantas vezes quiser.",
     ],
   },
   {
-    id: "storytelling",
-    label: "Storytelling Imersivo",
-    description: "Narrativa em capítulos com CTA final astral.",
+    id: "site-3d",
+    label: "Site + Elemento 3D",
+    description: "Inclui um elemento Meshy no layout.",
     hero: "/banners/Merse-2.png",
-    objective: "Conduzir o visitante por uma história.",
+    objective: "Agregar componentes 3D relevantes ao tema.",
     details: [
-      "Estrutura em capítulos que guia o visitante por uma jornada emocional.",
-      "Cada bloco une texto, imagem e microanimações para reforçar a narrativa.",
-      "Efeitos de parallax, trilhas de luz e títulos poéticos criam atmosfera imersiva.",
-      "O CTA final convida o usuário para iniciar a jornada ou acessar o universo apresentado.",
-      "Recomendado para campanhas de lançamento, páginas institucionais e experiências sensoriais.",
-      "Foco em impacto cinematográfico, ritmo fluido e storytelling inspirador.",
+      "Informe o objeto (ex.: dente, nave, produto) e a Meshy gera o .glb.",
+      "O job roda em paralelo e o preview mostra o status “Processando…”.",
+      "Ótimo para nichos que precisam de destaque visual 3D (ex.: saúde, tech).",
+      "Limita-se a 1–2 elementos por página para manter performance.",
+      "É possível baixar o modelo e renderizar em Three.js ou apenas disponibilizar o link.",
     ],
   },
 ];
@@ -74,6 +84,9 @@ const COLOR_SYSTEMS = [
   { id: "sunset", label: "Sunset Nova", preview: "Laranja • Rosa • Roxo" },
 ];
 
+const CUSTOM_PALETTE_ID = "custom";
+const CUSTOM_PALETTE_LABEL = "Cores personalizadas";
+
 const MODULE_LIBRARY = [
   { id: "hero", label: "Hero 3D animado" },
   { id: "pricing", label: "Tabela de planos" },
@@ -83,15 +96,280 @@ const MODULE_LIBRARY = [
   { id: "cta", label: "Banner CTA cósmico" },
 ];
 
+const ANIMATION_PRESETS: AnimationPreset[] = [
+  {
+    id: "waves-canvas",
+    label: "Merse Tide",
+    description: "Ondas suaves seguem o mouse usando Canvas.",
+    html: `
+<canvas id="merse-waves" style="position:fixed;inset:0;z-index:-1;"></canvas>
+<script>
+const canvas=document.getElementById("merse-waves");
+const ctx=canvas.getContext("2d");
+let w,h,mouse={x:0,y:0};
+function resize(){w=canvas.width=window.innerWidth;h=canvas.height=window.innerHeight;}
+window.addEventListener("resize",resize);resize();
+window.addEventListener("pointermove",e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+function draw(){
+ctx.clearRect(0,0,w,h);
+for(let i=0;i<4;i++){
+const offset=i*30;
+ctx.beginPath();
+for(let x=0;x<=w;x+=20){
+const y=h/2+Math.sin((x+offset)/40)*25*Math.cos(Date.now()/1000+i)+ (mouse.y-h/2)/8;
+if(x===0){ctx.moveTo(x,y);}else{ctx.lineTo(x,y);}
+}
+ctx.strokeStyle=\`rgba(168,85,247,\${0.2+(i*0.1)})\`;
+ctx.lineWidth=1.5;
+ctx.stroke();
+}
+requestAnimationFrame(draw);
+}
+draw();
+</script>`,
+  },
+  {
+    id: "particles-trail",
+    label: "Stellar Trail",
+    description: "Pontinhos de luz seguem o cursor e somem.",
+    html: `
+<canvas id="merse-trail" style="position:fixed;inset:0;z-index:-1;"></canvas>
+<script>
+const canvasTrail=document.getElementById("merse-trail");
+const ctxTrail=canvasTrail.getContext("2d");
+let particles=[];
+function resizeTrail(){canvasTrail.width=window.innerWidth;canvasTrail.height=window.innerHeight;}
+window.addEventListener("resize",resizeTrail);resizeTrail();
+window.addEventListener("pointermove",e=>{
+for(let i=0;i<3;i++){
+particles.push({x:e.clientX,y:e.clientY,alpha:1,dx:(Math.random()-0.5)*2,dy:(Math.random()-0.5)*2});
+}
+});
+function loopTrail(){
+ctxTrail.fillStyle="rgba(2,1,10,0.2)";
+ctxTrail.fillRect(0,0,canvasTrail.width,canvasTrail.height);
+particles.forEach((p,index)=>{
+p.x+=p.dx;p.y+=p.dy;p.alpha-=0.01;
+ctxTrail.fillStyle=\`rgba(255,255,255,\${p.alpha})\`;
+ctxTrail.fillRect(p.x,p.y,2,2);
+if(p.alpha<=0)particles.splice(index,1);
+});
+requestAnimationFrame(loopTrail);
+}
+loopTrail();
+</script>`,
+  },
+  {
+    id: "click-rings",
+    label: "Pulse Orbit",
+    description: "Cliques criam círculos que se expandem.",
+    html: `
+<div id="merse-click-layer" style="position:fixed;inset:0;z-index:-1;overflow:hidden;"></div>
+<style>
+.merse-ring{position:absolute;border:1px solid rgba(236,72,153,0.6);border-radius:999px;animation:merseRing 0.6s ease-out forwards;}
+@keyframes merseRing{to{transform:scale(8);opacity:0;}}
+</style>
+<script>
+const ringLayer=document.getElementById("merse-click-layer");
+window.addEventListener("click",e=>{
+const ring=document.createElement("span");
+ring.className="merse-ring";
+ring.style.left=e.clientX+"px";
+ring.style.top=e.clientY+"px";
+ringLayer.appendChild(ring);
+setTimeout(()=>ring.remove(),600);
+});
+</script>`,
+  },
+  {
+    id: "svg-waves",
+    label: "Aurora Drift",
+    description: "Ondas translúcidas se movem no fundo.",
+    html: `
+<svg style="position:fixed;inset:0;z-index:-1;" viewBox="0 0 800 400" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="merseWaveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(79,70,229,0.4)"/>
+      <stop offset="50%" stop-color="rgba(236,72,153,0.3)"/>
+      <stop offset="100%" stop-color="rgba(14,165,233,0.4)"/>
+    </linearGradient>
+  </defs>
+  <path id="merse-svg-wave" d="M0 220 Q200 170 400 220 T800 220 V400 H0 Z" fill="url(#merseWaveGrad)">
+    <animate
+      attributeName="d"
+      dur="12s"
+      repeatCount="indefinite"
+      values="
+        M0 220 Q200 170 400 220 T800 220 V400 H0 Z;
+        M0 180 Q200 230 400 170 T800 210 V400 H0 Z;
+        M0 200 Q200 190 400 210 T800 230 V400 H0 Z;
+        M0 220 Q200 170 400 220 T800 220 V400 H0 Z
+      "
+    />
+  </path>
+</svg>`,
+  },
+  {
+    id: "bubbles",
+    label: "Nebula Bubbles",
+    description: "Bolhas sobem lentamente no background.",
+    html: `
+<style>
+.merse-bubbles::before,
+.merse-bubbles::after{
+content:"";
+position:fixed;
+inset:0;
+background:radial-gradient(circle,rgba(255,255,255,0.2) 4px,transparent 8px);
+background-size:120px 120px;
+animation:merseBubbles 18s linear infinite;
+pointer-events:none;
+}
+.merse-bubbles::after{
+animation-duration:25s;
+opacity:0.5;
+}
+@keyframes merseBubbles{
+from{transform:translateY(0);}
+to{transform:translateY(-120px);}
+}
+</style>
+<div class="merse-bubbles"></div>`,
+  },
+];
+
+const extractHtmlFromOutput = (output: unknown): string | null => {
+  if (!output) return null;
+  if (typeof output === "string") {
+    return output.trim().startsWith("<") ? output : null;
+  }
+  if (Array.isArray(output)) {
+    for (const entry of output) {
+      const html = extractHtmlFromOutput(entry);
+      if (html) return html;
+    }
+    return null;
+  }
+  if (typeof output === "object") {
+    const withHtml = (output as { html?: unknown; content?: unknown }).html ?? (output as any).content;
+    if (withHtml) return extractHtmlFromOutput(withHtml);
+  }
+  return null;
+};
+
+const STELLAR_POINTS = Array.from({ length: 18 }, (_, index) => ({
+  left: (index * 11.3) % 100,
+  top: (index * 17.7) % 100,
+}));
+
+const BUBBLE_POINTS = Array.from({ length: 8 }, (_, index) => ({
+  left: (index * 12.5) % 100,
+  bottom: 10 + ((index * 17) % 30),
+}));
+
+const AnimationPreview = ({ animationId }: { animationId: string }) => {
+  if (animationId === "waves-canvas") {
+    return (
+      <div className="animation-preview animation-preview--waves">
+        {[0, 1, 2, 3].map((index) => (
+          <span
+            key={`wave-${index.toString()}`}
+            className="preview-wave"
+            style={{
+              top: `${25 + index * 15}%`,
+              animationDelay: `${index * 0.4}s`,
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (animationId === "particles-trail") {
+    return (
+      <div className="animation-preview animation-preview--particles">
+        {STELLAR_POINTS.map((point, index) => (
+          <span
+            key={`particle-${index.toString()}`}
+            className="preview-particle"
+            style={{
+              left: `${point.left}%`,
+              top: `${point.top}%`,
+              animationDelay: `${index * 0.08}s`,
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (animationId === "click-rings") {
+    return (
+      <div className="animation-preview animation-preview--rings">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={`ring-${index.toString()}`}
+            className="preview-ring"
+            style={{
+              left: `${50 + index * 6}%`,
+              top: `${50 - index * 6}%`,
+              animationDelay: `${index * 0.25}s`,
+            }}
+          />
+        ))}
+        <span className="preview-core" />
+      </div>
+    );
+  }
+
+  if (animationId === "svg-waves") {
+    return <div className="animation-preview animation-preview--aurora" />;
+  }
+
+  return (
+    <div className="animation-preview animation-preview--bubbles">
+      {BUBBLE_POINTS.map((point, index) => (
+        <span
+          key={`bubble-${index.toString()}`}
+          className="preview-bubble"
+          style={{
+            left: `${point.left}%`,
+            bottom: `${point.bottom}%`,
+            animationDelay: `${index * 0.25}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 type FormState = {
   siteName: string;
   goal: string;
   menu: string;
   layout: LayoutPreset;
   palette: string;
+  paletteDescription: string;
   modules: string[];
   notes: string;
   heroMood: string;
+  animation: AnimationPreset;
+};
+
+type WebsiteResult = {
+  summary: string;
+  highlights: string[];
+  html: string;
+  imageUrl?: string;
+  effect?: {
+    id?: string;
+    name?: string;
+    intensity?: number;
+  } | null;
+  animation?: {
+    id?: string;
+    label?: string;
+  } | null;
 };
 
 const defaultState: FormState = {
@@ -100,9 +378,11 @@ const defaultState: FormState = {
   menu: "Início, Recursos, Planos, Comunidade, Contato",
   layout: LAYOUT_PRESETS[0],
   palette: COLOR_SYSTEMS[0].id,
+  paletteDescription: "",
   modules: ["hero", "pricing", "cta"],
   notes: "Foco em experiência imersiva, CTA claro e narrativa em três blocos.",
   heroMood: "Nebulosa violeta com partículas e hologramas leves",
+  animation: ANIMATION_PRESETS[0],
 };
 
 const STEPS = [
@@ -119,29 +399,47 @@ const STEPS = [
   {
     id: 3,
     title: "Conteúdo",
-    tagline: "Selecione módulos e detalhes criativos.",
+    tagline: "Escolha animação e detalhes criativos.",
   },
 ];
 
 export default function RascunhoWebsite() {
   const energy = useEnergy();
   const [state, setState] = useState<FormState>(defaultState);
+  const [lastPalettePreset, setLastPalettePreset] = useState(defaultState.palette);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [result, setResult] = useState<{
-    summary: string;
-    highlights: string[];
-    html: string;
-  } | null>(null);
+  const [result, setResult] = useState<WebsiteResult | null>(null);
   const [activeView, setActiveView] = useState<"preview" | "code">("preview");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number>(1);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [quickBrief, setQuickBrief] = useState("");
+  const [isQuickGenerating, setIsQuickGenerating] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [sitePrediction, setSitePrediction] = useState<{
+    id: string;
+    status: string;
+    html?: string | null;
+    logs?: string | null;
+    rawOutput?: unknown;
+  } | null>(null);
+  const [isGeneratingSite, setIsGeneratingSite] = useState(false);
+  const [siteGenerationError, setSiteGenerationError] = useState<string | null>(null);
+  const [siteCopyStatus, setSiteCopyStatus] = useState<"idle" | "copied">("idle");
 
-  const paletteInfo = useMemo(
-    () => COLOR_SYSTEMS.find((palette) => palette.id === state.palette),
-    [state.palette],
-  );
+  const paletteInfo = useMemo(() => {
+    if (state.palette === CUSTOM_PALETTE_ID) {
+      return {
+        id: CUSTOM_PALETTE_ID,
+        label: CUSTOM_PALETTE_LABEL,
+        preview: state.paletteDescription || "Definido manualmente",
+      };
+    }
+    return COLOR_SYSTEMS.find((palette) => palette.id === state.palette);
+  }, [state.palette, state.paletteDescription]);
   const hasResult = Boolean(result);
+  const siteHtml = sitePrediction?.html ?? null;
   const currentStep = useMemo(
     () => STEPS.find((step) => step.id === activeStep) ?? STEPS[0],
     [activeStep],
@@ -150,6 +448,16 @@ export default function RascunhoWebsite() {
   useEffect(() => {
     setCopyStatus("idle");
   }, [result?.html, activeView]);
+
+  useEffect(() => {
+    setSiteCopyStatus("idle");
+  }, [sitePrediction?.html]);
+
+  useEffect(() => {
+    if (state.palette && state.palette !== CUSTOM_PALETTE_ID) {
+      setLastPalettePreset(state.palette);
+    }
+  }, [state.palette]);
 
   const whatsappUrl = useMemo(() => {
     if (!result) return null;
@@ -168,19 +476,79 @@ export default function RascunhoWebsite() {
     return `https://api.whatsapp.com/send/?phone=${phone}&text=${message}&type=phone_number&app_absent=0`;
   }, [result, state.siteName]);
 
-  const toggleModule = (moduleId: string) => {
-    setState((prev) => {
-      const exists = prev.modules.includes(moduleId);
-      return {
-        ...prev,
-        modules: exists ? prev.modules.filter((id) => id !== moduleId) : [...prev.modules, moduleId],
-      };
-    });
-  };
-
   const handleChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setState((prev) => ({ ...prev, [key]: value }));
   };
+
+  const handlePaletteSelect = (paletteId: string) => {
+    setLastPalettePreset(paletteId);
+    setState((prev) => ({
+      ...prev,
+      palette: paletteId,
+      paletteDescription: "",
+    }));
+  };
+
+  const handlePaletteDescriptionChange = (value: string) => {
+    setState((prev) => ({
+      ...prev,
+      paletteDescription: value,
+      palette: value.trim().length > 0 ? CUSTOM_PALETTE_ID : lastPalettePreset,
+    }));
+  };
+
+  const buildSitePrompt = () => {
+    const lines = [
+      `Gere um site completo no padrão Merse.`,
+      `Nome do projeto: ${state.siteName}.`,
+      state.goal ? `Objetivo: ${state.goal}.` : null,
+      state.menu ? `Menu sugerido: ${state.menu}.` : null,
+      `Layout base: ${state.layout.label} — ${state.layout.description}.`,
+      state.layout.objective ? `Objetivo do layout: ${state.layout.objective}.` : null,
+      state.layout.details.length
+        ? `Diretrizes: ${state.layout.details.slice(0, 4).join(" | ")}.`
+        : null,
+      paletteInfo?.label ? `Paleta: ${paletteInfo.label} (${paletteInfo.preview ?? "custom"}).` : null,
+      state.paletteDescription ? `Cores personalizadas: ${state.paletteDescription}.` : null,
+      state.modules.length ? `Seções desejadas: ${state.modules.join(", ")}.` : null,
+      state.notes ? `Observações extras: ${state.notes}.` : null,
+      state.heroMood ? `Mood do hero: ${state.heroMood}.` : null,
+      state.animation?.label ? `Animação/Fundo: ${state.animation.label}.` : null,
+      `Retorne o site em HTML completo, com CSS inline e responsividade.`,
+    ];
+
+    return lines.filter((line): line is string => Boolean(line)).join("\n");
+  };
+
+  const buildBasePayload = () => ({
+    siteName: state.siteName,
+    goal: state.goal,
+    menu: state.menu,
+  layout: {
+    id: state.layout.id,
+    label: state.layout.label,
+    description: state.layout.description,
+    objective: state.layout.objective,
+    highlights: state.layout.details,
+  },
+    palette: {
+      id: state.palette,
+      label: paletteInfo?.label ?? state.palette,
+      preview: paletteInfo?.preview ?? "",
+    },
+    paletteDescription: state.paletteDescription,
+    modules: state.modules.map(
+      (moduleId) => MODULE_LIBRARY.find((module) => module.id === moduleId)?.label ?? moduleId,
+    ),
+    notes: state.notes,
+    heroMood: state.heroMood,
+    animation: {
+      id: state.animation.id,
+      label: state.animation.label,
+      description: state.animation.description,
+      html: state.animation.html,
+    },
+  });
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -193,29 +561,7 @@ export default function RascunhoWebsite() {
       return;
     }
 
-    const payload = {
-      siteName: state.siteName,
-      goal: state.goal,
-      menu: state.menu,
-      layout: {
-        id: state.layout.id,
-        label: state.layout.label,
-        description: state.layout.description,
-        objective: state.layout.objective,
-        highlights: state.layout.details,
-        referenceImage: state.layout.hero,
-      },
-      palette: {
-        id: state.palette,
-        label: paletteInfo?.label ?? state.palette,
-        preview: paletteInfo?.preview ?? "",
-      },
-      modules: state.modules.map(
-        (moduleId) => MODULE_LIBRARY.find((module) => module.id === moduleId)?.label ?? moduleId,
-      ),
-      notes: state.notes,
-      heroMood: state.heroMood,
-    };
+    const payload = buildBasePayload();
 
     try {
       const response = await fetch("/api/generate-website", {
@@ -237,6 +583,110 @@ export default function RascunhoWebsite() {
       setErrorMessage(error instanceof Error ? error.message : "Erro inesperado ao gerar blueprint.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickGenerate = async () => {
+    const trimmed = quickBrief.trim();
+
+    if (!trimmed) {
+      setQuickError("Descreva rapidamente como deseja o site para gerar automaticamente.");
+      return;
+    }
+
+    if (energy.plan === "free") {
+      setQuickError("O laboratório textual está disponível apenas para planos pagos. Atualize para liberar geração ilimitada.");
+      return;
+    }
+
+    setQuickError(null);
+    setErrorMessage(null);
+    setIsQuickGenerating(true);
+    setIsSubmitting(true);
+
+    const payload = {
+      ...buildBasePayload(),
+      goal: state.goal || "Geração automática de site via briefing rápido",
+      notes: `${state.notes}\n\nBriefing em texto livre:\n${trimmed}`,
+      rawBrief: trimmed,
+    };
+
+    try {
+      const response = await fetch("/api/generate-website", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Não foi possível gerar o site a partir do texto.");
+      }
+
+      setResult(data.website);
+      setActiveView("preview");
+      setCopyStatus("idle");
+    } catch (quickErrorResponse) {
+      setResult(null);
+      setQuickError(
+        quickErrorResponse instanceof Error
+          ? quickErrorResponse.message
+          : "Erro inesperado ao gerar site via texto.",
+      );
+    } finally {
+      setIsQuickGenerating(false);
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleWebsiteGeneratedFromChat = (website: WebsiteResult) => {
+    setResult(website);
+    setActiveView("preview");
+    setCopyStatus("idle");
+    setErrorMessage(null);
+    setQuickError(null);
+    setIsAssistantOpen(false);
+  };
+
+  const handleGenerateSiteWithReplicate = async () => {
+    if (energy.plan === "free") {
+      setSiteGenerationError("Atualize seu plano para usar o motor Merse hospedado na Replicate.");
+      return;
+    }
+
+    setIsGeneratingSite(true);
+    setSiteGenerationError(null);
+    setSitePrediction(null);
+
+    const sitePrompt = buildSitePrompt();
+
+    try {
+      const response = await fetch("/api/generate-site", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: sitePrompt }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Não foi possível gerar o site pelo modelo Merse.");
+      }
+
+      const html = extractHtmlFromOutput(data.output);
+      setSitePrediction({
+        id: data.id ?? "site-merse",
+        status: data.status ?? "unknown",
+        html,
+        logs: typeof data.logs === "string" ? data.logs : undefined,
+        rawOutput: data.output,
+      });
+    } catch (error) {
+      setSiteGenerationError(
+        error instanceof Error ? error.message : "Falha inesperada ao falar com a Replicate.",
+      );
+    } finally {
+      setIsGeneratingSite(false);
     }
   };
 
@@ -275,7 +725,7 @@ export default function RascunhoWebsite() {
               Rascunho intergaláctico de websites
             </h1>
             <p className="max-w-2xl text-sm text-white/70">
-              Defina tom, módulos e estética. O laboratório gera uma arquitetura pronta para apresentar
+              Defina tom, animação e estética. O laboratório gera uma arquitetura pronta para apresentar
               ao cliente ou alimentar seus fluxos de IA.
             </p>
           </div>
@@ -464,7 +914,7 @@ export default function RascunhoWebsite() {
                           <button
                             key={palette.id}
                             type="button"
-                            onClick={() => handleChange("palette", palette.id)}
+                            onClick={() => handlePaletteSelect(palette.id)}
                             className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition ${
                               isActive
                                 ? "border-purple-300/60 bg-purple-500/10 text-white shadow-[0_0_18px_rgba(168,85,247,0.3)]"
@@ -492,6 +942,21 @@ export default function RascunhoWebsite() {
                         );
                       })}
                     </div>
+                    <div className="space-y-2 rounded-2xl border border-white/10 bg-black/35 p-5 text-sm text-white/80">
+                      <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+                        <PiPaletteFill className="text-purple-300" />
+                        Descreva suas cores predominantes
+                      </label>
+                      <textarea
+                        value={state.paletteDescription}
+                        onChange={(event) => handlePaletteDescriptionChange(event.target.value)}
+                        className="min-h-[70px] w-full resize-none rounded-2xl border border-white/15 bg-black/30 px-4 py-3 text-sm text-white placeholder-white/40 focus:border-purple-400/60 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                        placeholder="Ex.: Preto absoluto com detalhes em azul elétrico e acentos magenta neon."
+                      />
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-white/45">
+                        Caso não queira usar as paletas prontas, escreva aqui as cores que iremos usar.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -500,29 +965,33 @@ export default function RascunhoWebsite() {
                 <div className="space-y-6">
                   <div className="space-y-3">
                     <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
-                      <PiListChecksFill className="text-purple-300" />
-                      Seções principais
+                      <PiSparkleFill className="text-purple-300" />
+                      Animações Merse
                     </p>
                     <div className="grid gap-3 md:grid-cols-2">
-                      {MODULE_LIBRARY.map((module) => {
-                        const isActive = state.modules.includes(module.id);
+                      {ANIMATION_PRESETS.map((animation) => {
+                        const isActive = state.animation.id === animation.id;
                         return (
-                          <label
-                            key={module.id}
-                            className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
+                          <button
+                            key={animation.id}
+                            type="button"
+                            onClick={() => handleChange("animation", animation)}
+                            className={`relative overflow-hidden rounded-2xl border px-4 py-5 text-left transition ${
                               isActive
-                                ? "border-purple-300/60 bg-purple-500/10 text-white shadow-[0_0_20px_rgba(168,85,247,0.25)]"
-                                : "border-white/10 bg-black/30 text-white/65 hover:border-purple-300/40 hover:text-white"
+                                ? "border-purple-300/60 text-white shadow-[0_0_30px_rgba(168,85,247,0.35)]"
+                                : "border-white/10 text-white/70 hover:border-purple-300/40 hover:text-white"
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isActive}
-                              onChange={() => toggleModule(module.id)}
-                              className="h-4 w-4 rounded border border-white/30 bg-black/40 accent-purple-500"
-                            />
-                            <span>{module.label}</span>
-                          </label>
+                            <AnimationPreview animationId={animation.id} />
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
+                            <div className="relative z-10 space-y-2">
+                              <span className="text-base font-semibold">{animation.label}</span>
+                              <p className="text-sm text-white/80">{animation.description}</p>
+                              <span className="text-[11px] uppercase tracking-[0.35em] text-white/50">
+                                HTML pronto será inserido no blueprint.
+                              </span>
+                            </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -620,6 +1089,14 @@ export default function RascunhoWebsite() {
                     </span>
                   </li>
                   <li>
+                    <span className="text-white/60">Cores predominantes:</span>{" "}
+                    <span className="text-white">
+                      {state.paletteDescription
+                        ? state.paletteDescription
+                        : "Você pode escrever suas cores no passo 2."}
+                    </span>
+                  </li>
+                  <li>
                     <span className="text-white/60">Objetivo do layout:</span>{" "}
                     <span className="text-white">{state.layout.objective}</span>
                   </li>
@@ -632,29 +1109,65 @@ export default function RascunhoWebsite() {
                     </span>
                   </li>
                   <li>
-                    <span className="text-white/60">Módulos selecionados:</span>{" "}
-                    <span className="text-white">
-                      {state.modules.length
-                        ? state.modules
-                            .map(
-                              (moduleId) =>
-                                MODULE_LIBRARY.find((module) => module.id === moduleId)?.label ?? moduleId,
-                            )
-                            .join(", ")
-                        : "Nenhum módulo ativado ainda."}
-                    </span>
+                    <span className="text-white/60">Animação escolhida:</span>{" "}
+                    <span className="text-white">{state.animation.label}</span>
                   </li>
                 </ul>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/45">
                   Ajuste qualquer passo a qualquer momento — o resumo acompanha suas escolhas.
                 </p>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,0.08)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(236,72,153,0.25),transparent_60%)] opacity-80" />
+            <div className="relative space-y-4">
+              <header className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">Gerar via texto</p>
+                <h2 className="text-xl font-semibold text-white">Descreva e receba o site instantâneo</h2>
+                <p className="text-sm text-white/70">
+                  Envie um briefing livre que será enviado ao modelo configurado no .env (OpenAI). Nós lapidamos o pedido
+                  e devolvemos o HTML completo com a identidade Merse.
+                </p>
+              </header>
+              <textarea
+                value={quickBrief}
+                onChange={(event) => setQuickBrief(event.target.value)}
+                placeholder="Ex.: Quero um site para vender minha inteligência artificial de roupas. Preciso de hero com vídeo, depoimentos e tabela de planos neon."
+                className="min-h-[140px] w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder-white/35 shadow-inner focus:border-purple-400/60 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                disabled={isSubmitting}
+              />
+              {quickError && (
+                <p className="text-xs font-semibold text-rose-200">{quickError}</p>
+              )}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleQuickGenerate}
+                  disabled={isQuickGenerating || isSubmitting}
+                  className="flex min-w-[200px] flex-1 items-center justify-center gap-2 rounded-2xl border border-purple-400/60 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-5 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-white shadow-[0_18px_45px_rgba(168,85,247,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <PiPaperPlaneTiltFill
+                    className={`text-base ${isQuickGenerating ? "animate-pulse" : ""}`}
+                  />
+                  {isQuickGenerating ? "Gerando site..." : "Gerar via texto"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAssistantOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-black/30 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  <PiQuestionFill className="text-base text-purple-200" />
+                  Abrir chat do laboratório
+                </button>
               </div>
             </div>
+          </div>
 
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
-              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(255,255,255,0.08)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(168,85,247,0.2),transparent_55%)] opacity-80" />
-              <div className="relative space-y-5">
-                <header>
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(255,255,255,0.08)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(168,85,247,0.2),transparent_55%)] opacity-80" />
+            <div className="relative space-y-5">
+              <header>
                   <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">
                     Laboratório Merse
                   </p>
@@ -692,6 +1205,39 @@ export default function RascunhoWebsite() {
                               </li>
                             ))}
                           </ul>
+                        </div>
+                      )}
+
+                      {result.effect?.name && (
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.35em] text-white/50">Efeito aplicado</p>
+                          <p className="text-sm text-white/80">
+                            {result.effect.name} · intensidade {result.effect.intensity ?? "default"}
+                          </p>
+                        </div>
+                      )}
+
+                      {result.animation?.label && (
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.35em] text-white/50">
+                            Camada animada
+                          </p>
+                          <p className="text-sm text-white/80">{result.animation.label}</p>
+                        </div>
+                      )}
+
+                      {result.imageUrl && (
+                        <div className="space-y-3">
+                          <p className="text-xs uppercase tracking-[0.35em] text-white/50">
+                            Visual gerado
+                          </p>
+                          <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/40">
+                            <img
+                              src={result.imageUrl}
+                              alt="Visual conceitual gerado automaticamente"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
                         </div>
                       )}
 
@@ -768,12 +1314,12 @@ export default function RascunhoWebsite() {
                   ) : (
                     <div className="space-y-4 text-sm text-white/70">
                       <p>
-                        Gere o primeiro blueprint para visualizar o código pronto do site. Selecione módulos,
-                        identidades e descreva os diferenciais — a Merse devolve HTML + CSS estilizados no padrão intergaláctico.
+                        Gere o primeiro blueprint para visualizar o código pronto do site. Escolha layout,
+                        animações e descreva os diferenciais — a Merse devolve HTML + CSS estilizados no padrão intergaláctico.
                       </p>
                       <ul className="space-y-2">
                         <li>• Ajuste paleta e layout para direcionar o tom do código gerado.</li>
-                        <li>• Os módulos escolhidos influenciam a estrutura e as seções produzidas.</li>
+                        <li>• A animação escolhida injeta HTML pronto para o efeito de fundo.</li>
                         <li>• Use as observações para pedir integrações, animações ou componentes específicos.</li>
                       </ul>
                     </div>
@@ -782,30 +1328,108 @@ export default function RascunhoWebsite() {
               </div>
             </div>
 
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,0.06)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(59,130,246,0.2),transparent_55%)] opacity-70" />
+              <div className="relative space-y-4">
+                <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em] text-purple-200/70">Fluxo Merse</p>
+                    <h2 className="text-xl font-semibold text-white">Site renderizado via Replicate</h2>
+                    <p className="text-sm text-white/65">
+                      O motor Merse hospedado na Replicate monta o HTML final com animações e componentes
+                      cósmicos prontos para o Builder.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateSiteWithReplicate}
+                    disabled={isGeneratingSite}
+                    className="inline-flex items-center gap-2 rounded-full border border-purple-400/60 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white shadow-[0_18px_40px_rgba(168,85,247,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <PiSparkleFill className={`text-base ${isGeneratingSite ? "animate-spin" : ""}`} />
+                    {isGeneratingSite ? "Gerando..." : "Gerar com modelo Merse"}
+                  </button>
+                </header>
+
+                {siteGenerationError && (
+                  <p className="rounded-2xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-200">
+                    {siteGenerationError}
+                  </p>
+                )}
+
+                {sitePrediction && (
+                  <div className="space-y-3 text-sm text-white/75">
+                    <p>
+                      <span className="text-white/55">Status:</span> {sitePrediction.status}
+                    </p>
+                    <p className="text-xs text-white/50">ID: {sitePrediction.id}</p>
+                  </div>
+                )}
+
+                {siteHtml ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.35em] text-white/50">Preview final</p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!siteHtml) return;
+                          try {
+                            await navigator.clipboard.writeText(siteHtml);
+                            setSiteCopyStatus("copied");
+                            setTimeout(() => setSiteCopyStatus("idle"), 2500);
+                          } catch (copyError) {
+                            console.warn("Não foi possível copiar o HTML replicado:", copyError);
+                            setSiteCopyStatus("idle");
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1 text-[11px] uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        {siteCopyStatus === "copied" ? (
+                          <>
+                            <PiCheckBold />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <PiCopySimpleFill />
+                            Copiar
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/80">
+                      <iframe
+                        key={sitePrediction?.id ?? "merse-replicate"}
+                        title="Preview replicado"
+                        srcDoc={siteHtml}
+                        className="h-[480px] w-full border-0 bg-white"
+                      />
+                    </div>
+                  </div>
+                ) : sitePrediction ? (
+                  <pre className="max-h-[320px] overflow-auto rounded-2xl border border-white/10 bg-black/70 p-4 text-xs text-white/70">
+                    {JSON.stringify(sitePrediction.rawOutput ?? sitePrediction, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-white/65">
+                    Gere o blueprint e, quando estiver pronto para ver o site real, clique em “Gerar com
+                    modelo Merse”. O HTML final aparece aqui, pronto para copiar.
+                  </p>
+                )}
+
+                {sitePrediction?.logs && (
+                  <details className="rounded-2xl border border-white/10 bg-black/55 p-4 text-xs text-white/70">
+                    <summary className="cursor-pointer text-white">Logs da Replicate</summary>
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">{sitePrediction.logs}</pre>
+                  </details>
+                )}
+              </div>
+            </div>
+
             {errorMessage && (
               <div className="rounded-3xl border border-rose-400/50 bg-rose-500/10 px-5 py-4 text-sm text-rose-100 shadow-[0_18px_48px_rgba(244,63,94,0.2)]">
                 {errorMessage}
-              </div>
-            )}
-
-            {state.modules.length > 0 && (
-              <div className="grid gap-6 md:grid-cols-2">
-                {state.modules.map((moduleId) => {
-                  const moduleLabel =
-                    MODULE_LIBRARY.find((module) => module.id === moduleId)?.label ?? moduleId;
-                  return (
-                    <div
-                      key={moduleId}
-                      className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/70 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
-                    >
-                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_60%)] opacity-80" />
-                      <div className="relative space-y-2">
-                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Módulo sugerido</p>
-                        <p className="text-base text-white">{moduleLabel}</p>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             )}
 
@@ -826,6 +1450,47 @@ export default function RascunhoWebsite() {
           </section>
         </div>
       </div>
+
+      <AnimatePresence>
+        {isAssistantOpen && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-40 cursor-default bg-black/0"
+              onClick={() => setIsAssistantOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.aside
+              className="fixed bottom-8 right-8 z-50 w-full max-w-md"
+              initial={{ opacity: 0, y: 16, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 220, damping: 24 }}
+            >
+              <div className="relative flex h-[520px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/85 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={() => setIsAssistantOpen(false)}
+                  className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 transition hover:border-white/40 hover:bg-white/20 hover:text-white"
+                  aria-label="Fechar assistente galáctico"
+                >
+                  <PiXBold className="text-base" />
+                </button>
+                <div className="h-full overflow-hidden px-4 pb-4 pt-10">
+                  <PromptChat
+                    embedded
+                    storageKey="merse.chat.website"
+                    mode="website"
+                    onWebsiteGenerated={handleWebsiteGeneratedFromChat}
+                  />
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

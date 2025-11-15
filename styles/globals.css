@@ -115,3 +115,168 @@ body {
     transform: translate3d(var(--star-x, 6px), var(--star-y, 3px), 0);
   }
 }
+
+.animation-preview {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.animation-preview--waves {
+  background: radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.3), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(236, 72, 153, 0.35), transparent 60%),
+    #060015;
+}
+
+.animation-preview--waves .preview-wave {
+  position: absolute;
+  left: -20%;
+  width: 140%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.55), transparent);
+  filter: blur(1px);
+  animation: previewWaveDrift 7s ease-in-out infinite;
+}
+
+.animation-preview--particles {
+  background: radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.08), transparent 60%),
+    #030112;
+}
+
+.animation-preview--particles .preview-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 12px rgba(173, 216, 255, 0.5);
+  animation: previewParticleBlink 2.8s ease-in-out infinite;
+}
+
+.animation-preview--rings {
+  background: radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.2), transparent 70%),
+    radial-gradient(circle at 20% 40%, rgba(79, 70, 229, 0.2), transparent 75%),
+    #070118;
+}
+
+.animation-preview--rings .preview-ring {
+  position: absolute;
+  border: 1px solid rgba(236, 72, 153, 0.6);
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  animation: previewRingPulse 1.8s ease-out infinite;
+}
+
+.animation-preview--rings .preview-core {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.9), rgba(79, 70, 229, 0.5));
+  box-shadow: 0 0 16px rgba(236, 72, 153, 0.8);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.animation-preview--aurora {
+  background: linear-gradient(120deg, rgba(14, 165, 233, 0.18), rgba(236, 72, 153, 0.12)),
+    #03040f;
+}
+
+.animation-preview--aurora::before,
+.animation-preview--aurora::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.25), transparent 55%);
+  filter: blur(45px);
+  animation: previewAuroraFloat 12s ease-in-out infinite;
+}
+
+.animation-preview--aurora::after {
+  animation-delay: 3s;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.25), transparent 60%);
+}
+
+.animation-preview--bubbles {
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.12), rgba(236, 72, 153, 0.08)),
+    #03000f;
+}
+
+.animation-preview--bubbles .preview-bubble {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.35);
+  animation: previewBubbleRise 4.2s ease-in-out infinite;
+}
+
+@keyframes previewWaveDrift {
+  0% {
+    transform: translate3d(0, -10%, 0);
+  }
+  50% {
+    transform: translate3d(10%, 10%, 0);
+  }
+  100% {
+    transform: translate3d(0, -10%, 0);
+  }
+}
+
+@keyframes previewParticleBlink {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes previewRingPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes previewAuroraFloat {
+  0% {
+    transform: translate3d(-6%, -4%, 0);
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0);
+  }
+  100% {
+    transform: translate3d(-6%, -4%, 0);
+  }
+}
+
+@keyframes previewBubbleRise {
+  0% {
+    transform: translate3d(0, 20%, 0) scale(0.8);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(0, -120%, 0) scale(1.1);
+    opacity: 0;
+  }
+}
