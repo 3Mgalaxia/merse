@@ -439,7 +439,7 @@ export default function Planos() {
                       name="cardNumber"
                       className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
                       placeholder="0000 0000 0000 0000"
-                      required={selectedPaymentMethod !== "pix"}
+                      required
                     />
                   </label>
                   <label className="flex flex-col gap-2">
@@ -451,7 +451,7 @@ export default function Planos() {
                       name="cardExpiry"
                       className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
                       placeholder="MM/AA"
-                      required={selectedPaymentMethod !== "pix"}
+                      required
                     />
                   </label>
                   <label className="flex flex-col gap-2">
@@ -463,7 +463,7 @@ export default function Planos() {
                       name="cardCvv"
                       className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-purple-300/60"
                       placeholder="***"
-                      required={selectedPaymentMethod !== "pix"}
+                      required
                     />
                   </label>
                 </>

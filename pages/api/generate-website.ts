@@ -43,7 +43,7 @@ type AnimationBrief = {
 };
 
 type SuccessResponse = { website: WebsiteCodePayload };
-type ErrorResponse = { error: string };
+type ErrorResponse = { error: string; details?: unknown };
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -176,16 +176,17 @@ export default async function handler(
   const rateKey = `generate-website:${userId ?? clientIp}`;
   const rate = applyRateLimit(rateKey, 10, 60_000);
   if (!rate.allowed) {
+    const retryAfter = rate.retryAfter;
     await logApiAction({
       action: "generate-website",
       userId,
       status: 429,
       durationMs: Date.now() - startedAt,
-      metadata: { reason: "rate_limited", retryAfter: rate.retryAfter },
+      metadata: { reason: "rate_limited", retryAfter },
     });
     return res.status(429).json({
       error: "Muitas solicitações. Aguarde alguns segundos antes de tentar novamente.",
-      details: { retryAfter: rate.retryAfter },
+      details: { retryAfter },
     });
   }
 

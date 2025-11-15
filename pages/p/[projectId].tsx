@@ -17,10 +17,12 @@ export default function PublishedProjectPage() {
 
   useEffect(() => {
     if (!projectId || typeof projectId !== "string" || !firebaseFirestore) return;
+    const db = firebaseFirestore;
+    if (!db) return;
 
     const fetchProject = async () => {
       try {
-        const ref = doc(firebaseFirestore, "projects", projectId);
+        const ref = doc(db, "projects", projectId);
         const snapshot = await getDoc(ref);
 
         if (!snapshot.exists()) {

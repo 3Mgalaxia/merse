@@ -30,7 +30,11 @@ import { firebaseFirestore } from "@/lib/firebase";
 type FlowKey = "site" | "model" | "effect";
 type LayoutMode = "code" | "image" | "3d";
 
-type ProjectRecord = ProjectDocument & { id: string };
+type ProjectRecord = Omit<ProjectDocument, "createdAt" | "updatedAt"> & {
+  id: string;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+};
 
 const ACTION_COST = CREDIT_COSTS;
 
@@ -162,6 +166,8 @@ export default function BuilderPage() {
     const options = (currentProject.options ?? {}) as {
       siteName?: string;
       paletteColors?: { primary?: string; secondary?: string; accent?: string };
+      meshConcept?: string;
+      paletteDescription?: string;
     };
     if (options.siteName) {
       setSiteName(options.siteName);

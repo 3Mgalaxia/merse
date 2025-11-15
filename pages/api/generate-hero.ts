@@ -67,16 +67,17 @@ export default async function handler(
 
   const rate = applyRateLimit(`generate-hero:${userId ?? clientIp}`, 6, 60_000);
   if (!rate.allowed) {
+    const retryAfter = rate.retryAfter;
     await logApiAction({
       action: "generate-hero",
       userId,
       status: 429,
       durationMs: Date.now() - startedAt,
-      metadata: { reason: "rate_limited" },
+      metadata: { reason: "rate_limited", retryAfter },
     });
     return res.status(429).json({
       error: "Muitas solicitações de imagem. Aguarde alguns instantes.",
-      details: { retryAfter: rate.retryAfter },
+      details: { retryAfter },
     });
   }
 

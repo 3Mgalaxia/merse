@@ -37,6 +37,7 @@ export default async function handler(
 
   const rateResult = applyRateLimit(`meshy-create:${userId ?? clientIp}`, 6, 60_000);
   if (!rateResult.allowed) {
+    const retryAfter = rateResult.retryAfter;
     await logApiAction({
       action: "meshy-create",
       userId,
@@ -46,7 +47,7 @@ export default async function handler(
     });
     return res.status(429).json({
       error: "Muitas requisições para o 3D. Aguarde alguns instantes.",
-      details: { retryAfter: rateResult.retryAfter },
+      details: { retryAfter },
     });
   }
 

@@ -36,6 +36,7 @@ export default async function handler(
 
   const rateResult = applyRateLimit(`meshy-status:${userId ?? clientIp}`, 20, 60_000);
   if (!rateResult.allowed) {
+    const retryAfter = rateResult.retryAfter;
     await logApiAction({
       action: "meshy-status",
       userId,
@@ -45,7 +46,7 @@ export default async function handler(
     });
     return res.status(429).json({
       error: "Consultas ao status excederam o limite. Aguarde alguns segundos.",
-      details: { retryAfter: rateResult.retryAfter },
+      details: { retryAfter },
     });
   }
 
