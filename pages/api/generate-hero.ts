@@ -28,7 +28,7 @@ async function generateHeroImage(prompt: string) {
     model: IMAGE_MODEL || "gpt-image-1",
     prompt,
     n: 1,
-    size: "1024x768",
+    size: "1024x1024",
     quality: "high",
   });
 
