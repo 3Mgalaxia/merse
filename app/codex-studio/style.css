@@ -71,6 +71,12 @@
   margin-bottom: 2.5rem;
 }
 
+.codex-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .codex-header__meta {
   display: flex;
   flex-direction: column;
@@ -93,6 +99,37 @@
 .codex-header p {
   max-width: 620px;
   color: var(--codex-muted);
+}
+
+.codex-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.codex-hero-stats li {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.2rem;
+  padding: 0.75rem 1rem;
+  background: rgba(2, 2, 12, 0.65);
+  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.15);
+}
+
+.codex-hero-stats span {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--codex-muted);
+  margin-bottom: 0.35rem;
+}
+
+.codex-hero-stats strong {
+  font-size: 1rem;
+  color: var(--codex-white);
 }
 
 .codex-status {
@@ -138,6 +175,106 @@
 .codex-credit-pill small {
   font-size: 0.7rem;
   letter-spacing: 0.35em;
+  color: var(--codex-muted);
+}
+
+.codex-hero-console {
+  margin-bottom: 2.5rem;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.codex-actions-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.codex-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.codex-action-button {
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  text-align: left;
+  color: var(--codex-white);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.codex-action-button span {
+  display: block;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  font-size: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.codex-action-button p {
+  font-size: 0.85rem;
+  color: var(--codex-muted);
+}
+
+.codex-action-button:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.codex-mission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.codex-mission-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.codex-mission-list li {
+  position: relative;
+  padding-left: 1.4rem;
+  border-left: 2px solid rgba(168, 85, 247, 0.4);
+}
+
+.codex-mission-list li::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #a855f7, #22d3ee);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+}
+
+.codex-mission-list span {
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--codex-muted);
+}
+
+.codex-mission-list p {
+  margin-top: 0.2rem;
+  color: var(--codex-white);
+  font-size: 0.95rem;
+}
+
+.codex-mission-empty {
+  font-size: 0.85rem;
   color: var(--codex-muted);
 }
 

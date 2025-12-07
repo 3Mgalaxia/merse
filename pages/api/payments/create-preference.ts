@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { getMercadoPagoAccessToken } from "@/lib/mercadopago";
 
 type PreferenceResponse = {
   initPoint: string;
@@ -10,9 +11,11 @@ type ErrorResponse = {
 
 const planPrices: Record<string, number> = {
   free: 0,
+  // Planos principais (cobrança em USD)
   pulse: 10,
   nebula: 35,
   supernova: 79,
+  // Itens pontuais (mantidos em BRL)
   "leaderboard-image": 1,
   "leaderboard-object": 2,
   "leaderboard-video": 3,
@@ -34,28 +37,36 @@ export default async function handler(
     return res.status(405).json({ error: "Método não suportado." });
   }
 
-  const accessToken =
-    process.env.MERCADOPAGO_ACCESS_TOKEN ?? process.env.MP_ACCESS_TOKEN ?? process.env.MP_ACCESS_TOKEN;
-  if (!accessToken) {
-    return res
-      .status(500)
-      .json({ error: "Credenciais do Mercado Pago não configuradas (MERCADOPAGO_ACCESS_TOKEN)." });
-  }
-
-  const { plan, title, price, customer, paymentMethod } = req.body as {
+  const { plan, title, customer, paymentMethod } = req.body as {
     plan?: string;
     title?: string;
-    price?: number;
     customer?: { email?: string; name?: string };
     paymentMethod?: "credit" | "debit";
   };
 
-  if (!plan || !title || typeof price !== "number") {
-    return res.status(400).json({ error: "Dados do plano insuficientes para criar a cobrança." });
+  if (!plan || !title) {
+    return res
+      .status(400)
+      .json({ error: "Dados do plano insuficientes para criar a cobrança." });
   }
 
-  if (!planPrices[plan]) {
-    return res.status(400).json({ error: "Plano informado não é elegível para pagamento online." });
+  const planPrice = planPrices[plan];
+  if (typeof planPrice !== "number" || planPrice <= 0) {
+    return res
+      .status(400)
+      .json({ error: "Plano informado não é elegível para pagamento online." });
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = getMercadoPagoAccessToken();
+  } catch (error) {
+    return res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar as credenciais do Mercado Pago.",
+    });
   }
 
   try {
@@ -73,6 +84,9 @@ export default async function handler(
             default_payment_type_id: "credit_card",
           };
 
+    const isCorePlan = plan === "pulse" || plan === "nebula" || plan === "supernova";
+    const currency = isCorePlan ? "USD" : "BRL";
+
     const checkout = await preference.create({
       body: {
         items: [
@@ -80,8 +94,8 @@ export default async function handler(
             id: plan,
             title,
             quantity: 1,
-            unit_price: price,
-            currency_id: "BRL",
+            unit_price: planPrice,
+            currency_id: currency,
           },
         ],
         payer: {
@@ -96,6 +110,12 @@ export default async function handler(
         },
         auto_return: "approved",
         binary_mode: true,
+        metadata: {
+          plan,
+          price: planPrice,
+          env: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "local",
+          paymentMethod: paymentMethod ?? "credit",
+        },
       },
     });
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
@@ -99,77 +99,77 @@ const moduleBlocks: Array<{
     href: "/videos-empresas",
     description: "Produza apresentações imersivas que contam histórias de marca com visual galáctico.",
     icon: "videos-empresas",
-    accent: "from-indigo-500/40 via-blue-500/25 to-transparent",
+    accent: "from-indigo-500/45 via-slate-500/20 to-transparent",
   },
   {
     title: "Runway Wear",
     href: "/video-roupas",
     description: "Transforme roupas em motion-capture futurista e revele tecidos em 3D.",
     icon: "video-roupas",
-    accent: "from-fuchsia-500/40 via-pink-500/25 to-transparent",
+    accent: "from-fuchsia-500/45 via-rose-500/20 to-transparent",
   },
   {
     title: "Trocar Gênero",
     href: "/trocar-generos",
     description: "Experimente identidades instantaneamente com IA ajustando poses e estilo.",
     icon: "trocar-generos",
-    accent: "from-cyan-500/40 via-purple-500/25 to-transparent",
+    accent: "from-pink-500/45 via-sky-500/20 to-transparent",
   },
   {
     title: "Blueprints de Sites",
     href: "/rascunhos-website",
     description: "Descreva seu portal e receba wireframes completos em segundos.",
     icon: "rascunhos-website",
-    accent: "from-purple-500/40 via-slate-500/25 to-transparent",
+    accent: "from-violet-500/45 via-cyan-500/20 to-transparent",
   },
   {
     title: "Ranking Estelar",
     href: "/ranking",
     description: "Suba na leaderboard e desbloqueie boosters de energia cósmica.",
     icon: "ranking",
-    accent: "from-amber-500/40 via-orange-400/25 to-transparent",
+    accent: "from-amber-500/40 via-orange-500/20 to-transparent",
   },
   {
     title: "Gerador de Vídeos",
     href: "/gerar-video",
     description: "Combine prompts e referências para lançar trailers e teasers em minutos.",
     icon: "gerar-video",
-    accent: "from-blue-500/40 via-indigo-500/25 to-transparent",
+    accent: "from-blue-500/45 via-indigo-500/20 to-transparent",
   },
   {
     title: "Objetos 3D",
     href: "/gerar-objeto",
     description: "Crie produtos holográficos e renders orbitais para campanhas.",
     icon: "gerar-objeto",
-    accent: "from-teal-500/40 via-emerald-500/25 to-transparent",
+    accent: "from-teal-500/45 via-emerald-500/20 to-transparent",
   },
   {
     title: "Laboratório de Imagem",
     href: "/gerar-foto",
     description: "Converta prompts em visuais cinematográficos alinhados ao universo Merse.",
     icon: "gerar-foto",
-    accent: "from-rose-500/40 via-purple-500/25 to-transparent",
+    accent: "from-rose-500/45 via-purple-500/20 to-transparent",
   },
   {
     title: "Criador de Personas",
     href: "/criar-personagem",
     description: "Monte personagens, lore e atributos para suas narrativas imersivas.",
     icon: "criar-personagem",
-    accent: "from-sky-500/40 via-purple-500/25 to-transparent",
+    accent: "from-sky-500/45 via-violet-500/20 to-transparent",
   },
   {
     title: "Prompt Chat",
     href: "/chat",
     description: "Refine prompts com assistência em tempo real antes de lançar suas gerações.",
     icon: "chat",
-    accent: "from-blue-500/40 via-cyan-500/25 to-transparent",
+    accent: "from-cyan-500/45 via-blue-500/20 to-transparent",
   },
   {
     title: "Codex Studio",
     href: "/codex-studio",
     description: "Edite HTML com comandos em português e aplique a estética Merse instantaneamente.",
     icon: "codex-studio",
-    accent: "from-purple-500/40 via-indigo-500/25 to-transparent",
+    accent: "from-purple-500/45 via-indigo-500/20 to-transparent",
   },
 ];
 
@@ -304,6 +304,29 @@ export default function Gerar() {
   const packCheckoutRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const [highlightStage, setHighlightStage] = useState<"idle" | "card" | "checkout">("idle");
+  const backgroundRef = useRef<HTMLDivElement | null>(null);
+  const starField = useMemo(
+    () =>
+      Array.from({ length: 220 }).map((_, index) => {
+        const size = 1 + Math.random() * 2.4;
+        const driftX = `${-32 + Math.random() * 64}px`;
+        const driftY = `${-28 + Math.random() * 56}px`;
+        return {
+          id: `star-${index}`,
+          top: `${Math.random() * 100}%`,
+          left: `${Math.random() * 100}%`,
+          size,
+          opacity: 0.25 + Math.random() * 0.6,
+          animationDelay: `${Math.random() * 3}s`,
+          animationDuration: `${2 + Math.random() * 3}s`,
+          driftDelay: `${Math.random() * 6}s`,
+          driftDuration: `${10 + Math.random() * 12}s`,
+          driftX,
+          driftY,
+        };
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!showPackCheckout) return;
@@ -429,30 +452,59 @@ export default function Gerar() {
     };
   }, []);
 
+
   return (
     <LayoutGroup>
-      <div className="min-h-screen bg-black px-6 pb-14 pt-32 text-white">
-      <div className="space-y-10">
-        <Link href={heroTile.href} className="group block">
-          <article className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:-translate-y-1">
-            <div className="relative h-[320px] w-full sm:h-[420px]">
-              <Image src={heroTile.image} alt={heroTile.title} fill priority className="object-cover opacity-90" />
-              <div className={`absolute inset-0 bg-gradient-to-br ${heroTile.gradient}`} />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="relative flex h-full flex-col justify-end gap-4 p-10">
-                <p className="text-xs uppercase tracking-[0.5em] text-white/70">Destacado</p>
-                <h2 className="text-3xl font-semibold text-white sm:text-4xl">{heroTile.title}</h2>
-                <p className="max-w-xl text-sm text-white/80 sm:text-base">{heroTile.description}</p>
-                <span
-                  className={`inline-flex w-fit items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] transition ${accentClasses.primary}`}
-                >
-                  {heroTile.cta}
-                  <span aria-hidden>→</span>
-                </span>
+      <div className="relative min-h-screen bg-black px-6 pb-14 pt-32 text-white">
+        <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+          <div className="absolute inset-0">
+            {starField.map((star) => (
+              <span
+                key={star.id}
+                className="absolute block rounded-full bg-white/80"
+                style={{
+                  top: star.top,
+                  left: star.left,
+                  width: `${star.size}px`,
+                  height: `${star.size}px`,
+                  opacity: star.opacity,
+                  animationDelay: `${star.animationDelay}, ${star.driftDelay}`,
+                  animationDuration: `${star.animationDuration}, ${star.driftDuration}`,
+                  animationName: "pulse, star-drift",
+                  animationTimingFunction: "ease-in-out, ease-in-out",
+                  animationIterationCount: "infinite, infinite",
+                  animationDirection: "alternate, alternate",
+                  animationFillMode: "both, both",
+                  ["--star-x" as string]: star.driftX,
+                  ["--star-y" as string]: star.driftY,
+                }}
+              />
+            ))}
+          </div>
+          <div aria-hidden className="pointer-events-none absolute inset-0 mix-blend-screen" />
+
+        </div>
+        <div className="relative z-10 space-y-10">
+          <Link href={heroTile.href} className="group block">
+            <article className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:-translate-y-1">
+              <div className="relative h-[320px] w-full sm:h-[420px]">
+                <Image src={heroTile.image} alt={heroTile.title} fill priority className="object-cover opacity-90" />
+                <div className={`absolute inset-0 bg-gradient-to-br ${heroTile.gradient}`} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <div className="relative flex h-full flex-col justify-end gap-4 p-10">
+                  <p className="text-xs uppercase tracking-[0.5em] text-white/70">Destacado</p>
+                  <h2 className="text-3xl font-semibold text-white sm:text-4xl">{heroTile.title}</h2>
+                  <p className="max-w-xl text-sm text-white/80 sm:text-base">{heroTile.description}</p>
+                  <span
+                    className={`inline-flex w-fit items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] transition ${accentClasses.primary}`}
+                  >
+                    {heroTile.cta}
+                    <span aria-hidden>→</span>
+                  </span>
+                </div>
               </div>
-            </div>
-          </article>
-        </Link>
+            </article>
+          </Link>
 
         <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {secondaryTiles.map((tile) => (
@@ -499,8 +551,8 @@ export default function Gerar() {
             const Icon = moduleIconMap[module.icon];
             return (
             <Link key={module.title} href={module.href} className="group block">
-              <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-1">
-                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${module.accent}`} />
+              <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1">
+                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${module.accent} opacity-90`} />
                 <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
                 <div className="relative flex flex-col gap-3 text-white">
                   <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/70 transition group-hover:border-white/40 group-hover:text-white">
@@ -535,9 +587,9 @@ export default function Gerar() {
               href={api.href}
               target="_blank"
               rel="noreferrer"
-              className="group relative block overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-1"
+              className="relative block overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1"
             >
-              <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent}`} />
+              <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent} opacity-85`} />
               <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
               <div className="relative flex h-full flex-col gap-4 text-white">
                 <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
@@ -554,8 +606,82 @@ export default function Gerar() {
         </div>
       </section>
 
-      <section className="mt-12 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.05] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+      <section className="relative mt-12 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.037] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-3xl">
+        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+          <motion.div
+            aria-hidden
+            className="absolute -left-[58%] top-[-6%] h-72 w-[760px] rotate-[6deg] mix-blend-screen"
+            animate={{ x: ["-120%", "240%", "-120%"], y: ["10%", "-6%", "10%"] }}
+            transition={{ duration: 11.5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
+          >
+            <div className="absolute inset-0 blur-[26px]">
+              <div
+                className="absolute inset-y-10 left-0 right-20 rounded-full"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(236,72,153,0.3), rgba(236,72,153,0.16), transparent 72%)",
+                }}
+              />
+              <div
+                className="absolute left-16 top-12 h-36 w-36 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.78), rgba(236,72,153,0.88) 42%, rgba(236,72,153,0.42) 62%, transparent 72%)",
+                  boxShadow: "0 0 28px rgba(255,255,255,0.35), 0 0 110px rgba(236,72,153,0.6)",
+                }}
+              />
+            </div>
+          </motion.div>
+          <motion.div
+            aria-hidden
+            className="absolute -left-[60%] top-[32%] h-80 w-[780px] -rotate-[4deg] mix-blend-screen"
+            animate={{ x: ["230%", "-130%", "230%"], y: ["-2%", "12%", "-2%"] }}
+            transition={{ duration: 14.5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 0.8 }}
+          >
+            <div className="absolute inset-0 blur-[28px]">
+              <div
+                className="absolute inset-y-12 left-8 right-24 rounded-full"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(59,130,246,0.28), rgba(59,130,246,0.18), transparent 72%)",
+                }}
+              />
+              <div
+                className="absolute left-24 top-14 h-40 w-40 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 32% 32%, rgba(255,255,255,0.7), rgba(59,130,246,0.85) 42%, rgba(59,130,246,0.38) 65%, transparent 74%)",
+                  boxShadow: "0 0 26px rgba(255,255,255,0.3), 0 0 120px rgba(59,130,246,0.58)",
+                }}
+              />
+            </div>
+          </motion.div>
+          <motion.div
+            aria-hidden
+            className="absolute -left-[58%] bottom-[-14%] h-80 w-[780px] rotate-[3deg] mix-blend-screen"
+            animate={{ x: ["-130%", "230%", "-130%"], y: ["8%", "-8%", "8%"] }}
+            transition={{ duration: 16, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 1.4 }}
+          >
+            <div className="absolute inset-0 blur-[30px]">
+              <div
+                className="absolute inset-y-12 left-4 right-28 rounded-full"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(124,58,237,0.32), rgba(124,58,237,0.18), transparent 70%)",
+                }}
+              />
+              <div
+                className="absolute left-16 bottom-12 h-40 w-40 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 28% 32%, rgba(255,255,255,0.68), rgba(124,58,237,0.85) 45%, rgba(124,58,237,0.42) 65%, transparent 74%)",
+                  boxShadow: "0 0 28px rgba(255,255,255,0.32), 0 0 120px rgba(124,58,237,0.62)",
+                }}
+              />
+            </div>
+          </motion.div>
+        </div>
+        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-purple-200/80">Conheça a Merse</p>
             <h3 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
@@ -590,25 +716,24 @@ export default function Gerar() {
           </p>
         </header>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {promptPacks.map((pack) => {
             const isSelected = selectedPack?.id === pack.id;
             return (
               <article
                 key={pack.id}
-                className={`group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-1 hover:border-purple-300/40 ${
+                className={`group relative overflow-hidden rounded-3xl border border-white/10 bg-black/50 p-4 shadow-[0_14px_48px_rgba(0,0,0,0.5)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-purple-300/40 ${
                   isSelected ? "border-purple-300/50 shadow-[0_0_38px_rgba(168,85,247,0.4)]" : ""
                 }`}
               >
-                <div className="absolute inset-0 opacity-70 transition duration-300 group-hover:opacity-100">
-                  <div className={`h-full w-full bg-gradient-to-br ${pack.gradient}`} />
-                </div>
-                <div className="relative flex h-full flex-col gap-4 text-white">
-                  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${pack.gradient} opacity-85`} aria-hidden />
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-t from-black/65 via-black/25 to-transparent" aria-hidden />
+                <div className="relative flex h-full flex-col gap-3 text-white">
+                  <div className="relative -mx-4 -mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
                     <img
                       src={pack.image}
                       alt={pack.title}
-                      className="h-40 w-full object-cover opacity-95 transition duration-700 group-hover:scale-[1.02]"
+                      className="h-60 w-full object-cover opacity-95 transition duration-700 group-hover:scale-[1.02]"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                     <span className="absolute left-4 top-4 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.35em] text-white/70">
@@ -616,7 +741,7 @@ export default function Gerar() {
                     </span>
                   </div>
                   <p className="text-sm text-white/75">{pack.description}</p>
-                  <ul className="space-y-2 text-sm text-white/70">
+                  <ul className="space-y-1.5 text-sm text-white/70">
                     {pack.highlights.map((highlight) => (
                       <li key={highlight} className="flex items-center gap-2">
                         <span className="inline-flex h-2 w-2 rounded-full bg-white/60" />
@@ -624,12 +749,12 @@ export default function Gerar() {
                       </li>
                     ))}
                   </ul>
-                  <div className="relative mt-auto flex items-center justify-between text-[11px] uppercase tracking-[0.35em] text-white/60">
-                    <span>Pacote com 18+ prompts</span>
+                  <div className="relative mt-auto flex items-center justify-between text-[11px] uppercase tracking-[0.25em] text-white/65">
+                    <span className="whitespace-nowrap">Pacote com 18+ prompts</span>
                     <button
                       type="button"
                       onClick={() => handleSelectPack(pack)}
-                      className="relative overflow-hidden rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.35em] text-white transition hover:border-purple-300/40 hover:bg-purple-500/20 hover:text-white"
+                      className="relative overflow-hidden rounded-full border border-white/15 bg-white/10 px-5 py-2 text-[11px] uppercase tracking-[0.35em] text-white transition hover:border-purple-300/40 hover:bg-purple-500/20 hover:text-white"
                     >
                       {isSelected && highlightStage === "card" && (
                         <motion.span

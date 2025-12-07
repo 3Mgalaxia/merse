@@ -72,22 +72,9 @@ type Star = {
   duration: string;
   offsetX: number;
   offsetY: number;
+  size: number;
 };
 
-const floatingStars = [
-  { size: 12, top: "12%", left: "18%", duration: "22s", delay: "-4s" },
-  { size: 18, top: "28%", left: "72%", duration: "26s", delay: "-12s" },
-  { size: 14, top: "68%", left: "24%", duration: "24s", delay: "-6s" },
-  { size: 10, top: "78%", left: "66%", duration: "20s", delay: "-10s" },
-  { size: 8, top: "40%", left: "9%", duration: "28s", delay: "-2s" },
-  { size: 16, top: "15%", left: "52%", duration: "25s", delay: "-8s" },
-  { size: 9, top: "22%", left: "35%", duration: "23s", delay: "-5s" },
-  { size: 13, top: "55%", left: "78%", duration: "27s", delay: "-9s" },
-  { size: 11, top: "32%", left: "58%", duration: "21s", delay: "-7s" },
-  { size: 7, top: "82%", left: "18%", duration: "26s", delay: "-3s" },
-  { size: 15, top: "60%", left: "44%", duration: "29s", delay: "-11s" },
-  { size: 6, top: "48%", left: "12%", duration: "24s", delay: "-1s" },
-];
 
 export default function Home() {
   const router = useRouter();
@@ -103,6 +90,7 @@ export default function Home() {
     const generated = Array.from({ length: 80 }).map(() => {
       const offsetX = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 6);
       const offsetY = (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 4);
+      const size = 1 + Math.random() * 2.4;
       return {
         top: `${Math.random() * 100}%`,
         left: `${Math.random() * 100}%`,
@@ -111,11 +99,13 @@ export default function Home() {
         duration: `${7 + Math.random() * 6}s`,
         offsetX,
         offsetY,
+        size,
       };
     });
     const extra = Array.from({ length: 20 }).map(() => {
       const offsetX = (Math.random() > 0.5 ? 1 : -1) * (6 + Math.random() * 8);
       const offsetY = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 5);
+      const size = 0.8 + Math.random() * 2.2;
       return {
         top: `${5 + Math.random() * 90}%`,
         left: `${5 + Math.random() * 90}%`,
@@ -124,6 +114,7 @@ export default function Home() {
         duration: `${10 + Math.random() * 8}s`,
         offsetX,
         offsetY,
+        size,
       };
     });
     setStars([...generated, ...extra]);
@@ -150,36 +141,29 @@ export default function Home() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-black font-sans text-white">
       <div className="absolute inset-0 bg-gradient-to-b from-black via-purple-950/25 to-black" />
-      <div className="aurora absolute inset-x-[-20%] top-[-10%] h-[120%]" />
+      <div className="aurora absolute inset-x-[-20%] top-[-12%] h-[120%]" />
       <div className="absolute inset-0 pointer-events-none">
         {stars.map((star, index) => (
           <div
             key={`star-${index}`}
-            className="absolute h-1 w-1 rounded-full bg-white animate-twinkle star-drift"
+            className="absolute block rounded-full bg-white/80"
             style={{
               top: star.top,
               left: star.left,
-              animationDelay: star.delay,
-              animationDuration: star.duration,
-              opacity: star.opacity,
-              "--star-x": `${star.offsetX}px`,
-              "--star-y": `${star.offsetY}px`,
-              "--star-duration": star.duration,
-            } as CSSProperties}
-          />
-        ))}
-        {floatingStars.map((star, index) => (
-          <div
-            key={`floating-${index}`}
-            className="floating-star"
-            style={{
               width: `${star.size}px`,
               height: `${star.size}px`,
-              top: star.top,
-              left: star.left,
-              animationDuration: star.duration,
-              animationDelay: star.delay,
-            }}
+              opacity: star.opacity,
+              animationDelay: `${star.delay}, ${star.delay}`,
+              animationDuration: `${star.duration}, ${star.duration}`,
+              animationName: "pulse, star-drift",
+              animationTimingFunction: "ease-in-out, ease-in-out",
+              animationIterationCount: "infinite, infinite",
+              animationDirection: "alternate, alternate",
+              animationFillMode: "both, both",
+              ["--star-x" as string]: `${star.offsetX}px`,
+              ["--star-y" as string]: `${star.offsetY}px`,
+              ["--star-duration" as string]: star.duration,
+            } as CSSProperties}
           />
         ))}
       </div>
@@ -224,9 +208,9 @@ export default function Home() {
       </header>
 
       <main className="relative z-10">
-        <section className="mx-auto flex min-h-[70vh] w-full max-w-5xl flex-col items-center px-6 pt-16 text-center">
+        <section className="relative mx-auto flex min-h-[68vh] w-full max-w-6xl flex-col items-center px-6 pt-16 text-center md:pt-20">
           <h1 className="text-4xl font-extrabold leading-tight md:text-7xl">
-            <span className="bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent">
+            <span className="hero-gradient-text bg-gradient-to-r from-purple-400 via-pink-500 to-cyan-400 bg-clip-text text-transparent">
               CREATE, DISCOVER, EVOLVE
             </span>
           </h1>
@@ -242,6 +226,7 @@ export default function Home() {
             >
               <span className="relative z-10">Explorar universo</span>
               <span className="absolute inset-0 -z-0 rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-purple-700 blur-xl opacity-60 transition-opacity duration-300 group-hover:opacity-90" />
+              <span className="pointer-events-none absolute inset-[-18px] rounded-full border border-pink-400/30 opacity-60 blur-[6px] animate-[ping_1.8s_ease-out_infinite]" />
             </button>
             <button
               type="button"

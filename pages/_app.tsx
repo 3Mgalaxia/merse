@@ -10,7 +10,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  const showHud = router.pathname !== "/" && router.pathname !== "/login";
+  const showHud =
+    router.pathname !== "/" && router.pathname !== "/login" && router.pathname !== "/explorar";
 
   const [showGalaxyTransition, setShowGalaxyTransition] = useState(false);
   const shouldAnimateRef = useRef(false);

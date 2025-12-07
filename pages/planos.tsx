@@ -96,6 +96,11 @@ const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
   { id: "debit", label: "Cartão de débito" },
 ];
 
+const PIX_PLAN_PRICES_BRL: Partial<Record<keyof typeof planCatalog, number>> = {
+  pulse: 54.89,
+  nebula: 192.98,
+};
+
 export default function Planos() {
   const { setPlan, plan } = useEnergy();
   const [selectedTier, setSelectedTier] = useState<TierInfo | null>(null);
@@ -176,11 +181,14 @@ export default function Planos() {
         setIsProcessing(true);
         setCheckoutError(null);
         setPixCheckout(null);
+        const pixAmount =
+          (selectedTierInfo.planKey && PIX_PLAN_PRICES_BRL[selectedTierInfo.planKey]) ??
+          selectedTierInfo.priceValue;
         const response = await fetch("/api/payments/create-pix", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            amount: selectedTierInfo.priceValue,
+            amount: pixAmount,
             description: selectedTierInfo.title,
             customer: {
               name: payload.customer.name,
@@ -521,26 +529,10 @@ export default function Planos() {
                   required
                 />
               </label>
-              <div className="md:col-span-2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs text-white/70">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-white/55">Formas de pagamento</p>
-                <div className="flex flex-wrap gap-2 text-white">
-                  {["Cartão de crédito", "Pix instantâneo", "Cartão de débito"].map((method) => (
-                    <span
-                      key={method}
-                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.25em]"
-                    >
-                      {method}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[11px] text-white/60">
-                  Processado via Mercado Pago com as novas credenciais ativas — link seguro é aberto após a confirmação.
-                </p>
-              </div>
               {selectedPaymentMethod === "pix" && (
                 <p className="md:col-span-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
-                  Ao confirmar, geramos o QR Code Pix para este plano. Escaneie com seu banco e aguarde a
-                  confirmação automática da Merse (plano válido por 30 dias).
+                  Ao confirmar, geramos o QR Code Pix em reais (Pulse R$ 54,89 • Nebula R$ 192,98).
+                  Escaneie com seu banco e aguarde a confirmação automática da Merse (plano válido por 30 dias).
                 </p>
               )}
               <div className="md:col-span-2 flex items-center justify-between">

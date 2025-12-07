@@ -25,25 +25,25 @@ const CATEGORY_PRICING: Record<
   imagem: {
     planId: "leaderboard-image",
     priceValue: 1,
-    priceLabel: "US$ 1",
+    priceLabel: "R$ 1",
     description: "Download da combinação de prompt em resolução máxima.",
   },
   "objeto 3d": {
     planId: "leaderboard-object",
     priceValue: 2,
-    priceLabel: "US$ 2",
+    priceLabel: "R$ 2",
     description: "Inclui variações e mapas para uso em renders 3D comerciais.",
   },
   vídeo: {
     planId: "leaderboard-video",
     priceValue: 3,
-    priceLabel: "US$ 3",
+    priceLabel: "R$ 3",
     description: "Pacote com keyframes e ajustes recomendados para motion.",
   },
   video: {
     planId: "leaderboard-video",
     priceValue: 3,
-    priceLabel: "US$ 3",
+    priceLabel: "R$ 3",
     description: "Pacote com keyframes e ajustes recomendados para motion.",
   },
 };

@@ -23,7 +23,7 @@ const toolbarItems: ToolbarItem[] = [
   { label: "Início", href: "/gerar", icon: PiHouseSimpleFill },
   { label: "Imagem", href: "/gerar-foto", icon: PiImageFill },
   { label: "Vídeo", href: "/gerar-video", icon: PiVideoFill },
-  { label: "Site", href: "/rascunhos-website", icon: PiBrowsersFill },
+  { label: "Site", href: "/gerar-site", icon: PiBrowsersFill },
   { label: "Roupa", href: "/video-roupas", icon: PiTShirtFill },
   { label: "Criados", href: "/criados", icon: PiFolders },
 ];

@@ -1,4 +1,6 @@
+import { randomUUID } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { getMercadoPagoAccessToken } from "@/lib/mercadopago";
 
 type PixSuccessResponse = {
   qrCode: string;
@@ -19,15 +21,16 @@ export default async function handler(
     return res.status(405).json({ error: "Método não suportado." });
   }
 
-  const token =
-    process.env.MERCADOPAGO_ACCESS_TOKEN ??
-    process.env.MP_ACCESS_TOKEN ??
-    process.env.MP_ACCESS_TOKEN;
-
-  if (!token) {
-    return res
-      .status(500)
-      .json({ error: "Configure MERCADOPAGO_ACCESS_TOKEN no .env.local para usar Pix." });
+  let token: string;
+  try {
+    token = getMercadoPagoAccessToken();
+  } catch (error) {
+    return res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Configure MERCADOPAGO_ACCESS_TOKEN no .env.local para usar Pix.",
+    });
   }
 
   const { amount, description, customer } = req.body as {
@@ -47,6 +50,7 @@ export default async function handler(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         Accept: "application/json",
+        "X-Idempotency-Key": randomUUID(),
       },
       body: JSON.stringify({
         transaction_amount: amount,
