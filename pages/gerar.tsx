@@ -105,6 +105,7 @@ const moduleBlocks: Array<{
   description: string;
   icon: ModuleKey;
   accent: string;
+  cta?: string;
   download?: boolean;
 }> = [
   // 1. Geração de imagem

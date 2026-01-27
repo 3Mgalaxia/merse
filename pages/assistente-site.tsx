@@ -7,6 +7,16 @@ type SuggestionResponse = {
   callouts?: string[];
 };
 
+const isSuggestionResponse = (data: unknown): data is SuggestionResponse => {
+  if (!data || typeof data !== "object") return false;
+  const value = data as { suggestions?: unknown; headline?: unknown; callouts?: unknown };
+  return (
+    typeof value.headline === "string" &&
+    Array.isArray(value.suggestions) &&
+    value.suggestions.every((item) => typeof item === "string")
+  );
+};
+
 const QUICK_BRIEFS = [
   {
     id: "saas",
@@ -178,10 +188,10 @@ export default function AssistenteSite() {
             : "Nao foi possivel gerar sugestoes.";
         throw new Error(message);
       }
-      if (!data || typeof data !== "object" || ("error" in data && (data as { error?: string }).error)) {
+      if (!isSuggestionResponse(data)) {
         throw new Error("Nao foi possivel gerar sugestoes.");
       }
-      setResult(data as SuggestionResponse);
+      setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado ao gerar sugestoes.");
     } finally {
