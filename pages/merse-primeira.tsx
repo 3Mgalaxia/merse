@@ -99,7 +99,7 @@ export default function MersePrimeira() {
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isReplying) return;
-    const nextMessages = [...messages, { role: "user", content: trimmed }];
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
     setMessages(nextMessages);
     const nextStep = Math.min(step + 1, seedPrompts.length - 1);
     setStep(nextStep + 1);
