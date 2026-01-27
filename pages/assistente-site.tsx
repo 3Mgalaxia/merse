@@ -170,16 +170,18 @@ export default function AssistenteSite() {
           image: referencePayload,
         }),
       });
-      const data = (await response.json().catch(() => ({}))) as
-        | SuggestionResponse
-        | { error: string };
-      if ("error" in data && data.error) {
-        throw new Error(data.error);
-      }
+      const data = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error?: string }).error ?? "Nao foi possivel gerar sugestoes.")
+            : "Nao foi possivel gerar sugestoes.";
+        throw new Error(message);
+      }
+      if (!data || typeof data !== "object" || ("error" in data && (data as { error?: string }).error)) {
         throw new Error("Nao foi possivel gerar sugestoes.");
       }
-      setResult(data);
+      setResult(data as SuggestionResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado ao gerar sugestoes.");
     } finally {
