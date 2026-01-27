@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
@@ -16,7 +16,11 @@ import {
   PiChatsFill,
   PiImageFill as PiImageFillIcon,
   PiCodeFill,
+  PiDownloadSimpleFill,
+  PiCheckCircleFill,
+  PiCopySimpleFill,
 } from "react-icons/pi";
+import { isDesktopApp } from "@/utils/isDesktopApp";
 
 const moduleIconMap = {
   "videos-empresas": PiBuildingsFill,
@@ -30,6 +34,14 @@ const moduleIconMap = {
   "criar-personagem": PiMaskHappyFill,
   chat: PiChatsFill,
   "codex-studio": PiCodeFill,
+  "merse-desktop": PiDownloadSimpleFill,
+  "site-ia": PiBrowsersFill,
+  pricing: PiTrophyFill,
+  "dev-hub": PiCodeFill,
+  status: PiBrowsersFill,
+  showcase: PiImageFillIcon,
+  "canvas-ia": PiBrowsersFill,
+  "voz-ia": PiChatsFill,
 } as const;
 
 type ModuleKey = keyof typeof moduleIconMap;
@@ -93,42 +105,17 @@ const moduleBlocks: Array<{
   description: string;
   icon: ModuleKey;
   accent: string;
+  download?: boolean;
 }> = [
+  // 1. Geração de imagem
   {
-    title: "Vídeos Corporativos",
-    href: "/videos-empresas",
-    description: "Produza apresentações imersivas que contam histórias de marca com visual galáctico.",
-    icon: "videos-empresas",
-    accent: "from-indigo-500/45 via-slate-500/20 to-transparent",
+    title: "Laboratório de Imagem",
+    href: "/gerar-foto",
+    description: "Converta prompts em visuais cinematográficos alinhados ao universo Merse.",
+    icon: "gerar-foto",
+    accent: "from-rose-500/45 via-purple-500/20 to-transparent",
   },
-  {
-    title: "Runway Wear",
-    href: "/video-roupas",
-    description: "Transforme roupas em motion-capture futurista e revele tecidos em 3D.",
-    icon: "video-roupas",
-    accent: "from-fuchsia-500/45 via-rose-500/20 to-transparent",
-  },
-  {
-    title: "Trocar Gênero",
-    href: "/trocar-generos",
-    description: "Experimente identidades instantaneamente com IA ajustando poses e estilo.",
-    icon: "trocar-generos",
-    accent: "from-pink-500/45 via-sky-500/20 to-transparent",
-  },
-  {
-    title: "Blueprints de Sites",
-    href: "/rascunhos-website",
-    description: "Descreva seu portal e receba wireframes completos em segundos.",
-    icon: "rascunhos-website",
-    accent: "from-violet-500/45 via-cyan-500/20 to-transparent",
-  },
-  {
-    title: "Ranking Estelar",
-    href: "/ranking",
-    description: "Suba na leaderboard e desbloqueie boosters de energia cósmica.",
-    icon: "ranking",
-    accent: "from-amber-500/40 via-orange-500/20 to-transparent",
-  },
+  // 2. Geração de vídeo
   {
     title: "Gerador de Vídeos",
     href: "/gerar-video",
@@ -136,6 +123,31 @@ const moduleBlocks: Array<{
     icon: "gerar-video",
     accent: "from-blue-500/45 via-indigo-500/20 to-transparent",
   },
+  // 3. Vídeos corporativos
+  {
+    title: "Vídeos Corporativos",
+    href: "/videos-empresas",
+    description: "Produza apresentações imersivas que contam histórias de marca com visual galáctico.",
+    icon: "videos-empresas",
+    accent: "from-indigo-500/45 via-slate-500/20 to-transparent",
+  },
+  // 4. Edição de identidade
+  {
+    title: "Trocar Gênero",
+    href: "/trocar-generos",
+    description: "Experimente identidades instantaneamente com IA ajustando poses e estilo.",
+    icon: "trocar-generos",
+    accent: "from-pink-500/45 via-sky-500/20 to-transparent",
+  },
+  // 5. Vídeo fashion
+  {
+    title: "Runway Wear",
+    href: "/video-roupas",
+    description: "Transforme roupas em motion-capture futurista e revele tecidos em 3D.",
+    icon: "video-roupas",
+    accent: "from-fuchsia-500/45 via-rose-500/20 to-transparent",
+  },
+  // 6. Produtos 3D
   {
     title: "Objetos 3D",
     href: "/gerar-objeto",
@@ -143,12 +155,85 @@ const moduleBlocks: Array<{
     icon: "gerar-objeto",
     accent: "from-teal-500/45 via-emerald-500/20 to-transparent",
   },
+  // 7. Sites
   {
-    title: "Laboratório de Imagem",
-    href: "/gerar-foto",
-    description: "Converta prompts em visuais cinematográficos alinhados ao universo Merse.",
-    icon: "gerar-foto",
-    accent: "from-rose-500/45 via-purple-500/20 to-transparent",
+    title: "Blueprints de Sites",
+    href: "/rascunhos-website",
+    description: "Descreva seu portal e receba wireframes completos em segundos.",
+    icon: "rascunhos-website",
+    accent: "from-violet-500/45 via-cyan-500/20 to-transparent",
+  },
+  // 8. Mentor de sites
+  {
+    title: "Mentor IA de Sites",
+    href: "/assistente-site",
+    description: "Envie screenshots e receba dicas de layout, contraste e hierarquia visual em tempo real.",
+    icon: "site-ia",
+    accent: "from-indigo-600/45 via-purple-500/30 to-transparent",
+  },
+  // 9. Site IA
+  {
+    title: "Site IA",
+    href: "/site-ia",
+    description: "Crie páginas com IA usando blueprint Merse e preview instantâneo.",
+    icon: "site-ia",
+    accent: "from-blue-900/60 via-blue-700/45 to-black/65",
+  },
+  // 10. Codex Studio
+  {
+    title: "Codex Studio",
+    href: "/codex-studio",
+    description: "Edite HTML com comandos em português e aplique a estética Merse instantaneamente.",
+    icon: "codex-studio",
+    accent: "from-purple-500/45 via-indigo-500/20 to-transparent",
+  },
+  // 11. Codex Merse (VS Code)
+  {
+    title: "Codex Merse (VS Code)",
+    href: "https://marketplace.visualstudio.com/items?itemName=Merse.merse-codex",
+    description: "Extensão Merse para editar qualquer linguagem com o estilo da IA Merse.",
+    icon: "codex-studio",
+    accent: "from-slate-900/60 via-purple-700/35 to-black/70",
+  },
+  // 12. Dev Hub
+  {
+    title: "Dev Hub",
+    href: "/dev-hub",
+    description: "Endpoints, exemplos cURL/JS e status das engines para integrar rápido.",
+    icon: "dev-hub",
+    accent: "from-sky-500/70 via-cyan-400/55 to-indigo-900/80",
+  },
+  // 13. Showcase Merse
+  {
+    title: "Showcase Merse",
+    href: "/showcase",
+    description: "Galeria curada com filtros por mídia, indústria e popularidade.",
+    icon: "showcase",
+    accent: "from-fuchsia-500/70 via-amber-400/55 to-purple-900/80",
+  },
+  // 14. Canvas IA
+  {
+    title: "Canvas IA",
+    href: "/canvas-ia",
+    description: "Envie a imagem e receba textos, slogans e layouts autogerados no padrão Merse.",
+    icon: "canvas-ia",
+    accent: "from-violet-500/70 via-blue-400/55 to-indigo-900/80",
+  },
+  // 15. Voz IA Imersiva
+  {
+    title: "Voz IA Imersiva",
+    href: "/voz-ia",
+    description: "Narre vídeos e apresentações com voz neural estilizada e sync automático.",
+    icon: "voz-ia",
+    accent: "from-orange-500/70 via-rose-400/55 to-amber-900/80",
+  },
+  // Extras não listados na ordem pedida
+  {
+    title: "Ranking Estelar",
+    href: "/ranking",
+    description: "Suba na leaderboard e desbloqueie boosters de energia cósmica.",
+    icon: "ranking",
+    accent: "from-amber-500/40 via-orange-500/20 to-transparent",
   },
   {
     title: "Criador de Personas",
@@ -165,36 +250,40 @@ const moduleBlocks: Array<{
     accent: "from-cyan-500/45 via-blue-500/20 to-transparent",
   },
   {
-    title: "Codex Studio",
-    href: "/codex-studio",
-    description: "Edite HTML com comandos em português e aplique a estética Merse instantaneamente.",
-    icon: "codex-studio",
-    accent: "from-purple-500/45 via-indigo-500/20 to-transparent",
+    title: "Instalar Merse Desktop",
+    href: "https://github.com/3Mgalaxia/merse/releases/latest/download/Merse-arm64.dmg",
+    description: "Baixe o app Merse para desempenho máximo e atalhos dedicados.",
+    icon: "merse-desktop",
+    accent: "from-purple-900/60 via-purple-800/45 to-black/60",
+    download: true,
   },
 ];
 
 const apiShowcase = [
   {
+    id: "merse-gerador-de-imagem",
     title: "Merse · Gerador de Imagem",
-    href: "https://replicate.com/3mgalaxia/merse-gerador-de-imagem",
     description: "Transforme prompts em renders cinematográficos no endpoint otimizado da Merse.",
     badge: "Imagem",
     accent: "from-purple-500/40 via-blue-500/25 to-transparent",
+    command: "npx create-replicate --model=3mgalaxia/merse-gerador-de-imagem",
   },
   {
+    id: "merse",
     title: "Merse · Base Criativa",
-    href: "https://replicate.com/3mgalaxia/merse",
     description:
       "Envie uma foto e receba a versão masculina ou feminina com estilo Merse mantendo o rosto original.",
     badge: "Gênero",
     accent: "from-fuchsia-500/35 via-indigo-500/25 to-transparent",
+    command: null,
   },
   {
+    id: "merse-gerador-de-site",
     title: "Merse · Gerador de Site",
-    href: "https://replicate.com/3mgalaxia/merse-gerador-de-site",
     description: "Receba HTML completo para landings e seções futuristas com estética Merse.",
     badge: "Sites",
     accent: "from-cyan-500/35 via-emerald-500/25 to-transparent",
+    command: null,
   },
 ];
 
@@ -286,8 +375,17 @@ const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
   { id: "debit", label: "Cartão de débito" },
 ];
 
+type FirstCreation = {
+  title: string;
+  description: string;
+  imageDataUrl: string;
+  createdAt: string;
+  story?: string;
+};
+
 export default function Gerar() {
   const [heroTile, ...secondaryTiles] = bannerTiles;
+  const [objectsTile, rankingTile, runwayTile, blueprintTile, ...otherTiles] = secondaryTiles;
   const [selectedPack, setSelectedPack] = useState<(typeof promptPacks)[number] | null>(null);
   const [showPackCheckout, setShowPackCheckout] = useState(false);
   const [packIsProcessing, setPackIsProcessing] = useState(false);
@@ -304,7 +402,11 @@ export default function Gerar() {
   const packCheckoutRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const [highlightStage, setHighlightStage] = useState<"idle" | "card" | "checkout">("idle");
-  const backgroundRef = useRef<HTMLDivElement | null>(null);
+  const [enableGlows, setEnableGlows] = useState(false);
+  const [firstCreation, setFirstCreation] = useState<FirstCreation | null>(null);
+  const [apiGuideOpen, setApiGuideOpen] = useState(false);
+  const [selectedApiId, setSelectedApiId] = useState(apiShowcase[0].id);
+  const [apiCopyStatus, setApiCopyStatus] = useState<"idle" | "copied">("idle");
   const starField = useMemo(
     () =>
       Array.from({ length: 220 }).map((_, index) => {
@@ -336,6 +438,28 @@ export default function Gerar() {
     return () => window.clearTimeout(timer);
   }, [showPackCheckout]);
 
+  useEffect(() => {
+    setEnableGlows(isDesktopApp());
+  }, []);
+
+  useEffect(() => {
+    setApiCopyStatus("idle");
+  }, [selectedApiId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("merse.firstCreation");
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as FirstCreation;
+      if (parsed.imageDataUrl) {
+        setFirstCreation(parsed);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
   const handleSelectPack = (pack: (typeof promptPacks)[number]) => {
     if (highlightTimeoutRef.current) {
       window.clearTimeout(highlightTimeoutRef.current);
@@ -355,6 +479,31 @@ export default function Gerar() {
       setHighlightStage("checkout");
       highlightTimeoutRef.current = null;
     }, 420);
+  };
+
+  const selectedApi = useMemo(
+    () => apiShowcase.find((api) => api.id === selectedApiId) ?? apiShowcase[0],
+    [selectedApiId],
+  );
+
+  const handleOpenApiGuide = (apiId: string) => {
+    setSelectedApiId(apiId);
+    setApiGuideOpen(true);
+  };
+
+  const handleCloseApiGuide = () => {
+    setApiGuideOpen(false);
+  };
+
+  const handleCopyApiCommand = async () => {
+    if (!selectedApi.command) return;
+    try {
+      await navigator.clipboard.writeText(selectedApi.command);
+      setApiCopyStatus("copied");
+      window.setTimeout(() => setApiCopyStatus("idle"), 1600);
+    } catch {
+      setApiCopyStatus("idle");
+    }
   };
 
   const handlePackCheckoutSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -452,6 +601,29 @@ export default function Gerar() {
     };
   }, []);
 
+  const renderExperienceTile = (tile: (typeof secondaryTiles)[number]) => (
+    <Link key={tile.title} href={tile.href} className="group block">
+      <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_16px_36px_rgba(0,0,0,0.35)] transition-transform duration-500 group-hover:-translate-y-1">
+        <div className="relative h-64 w-full">
+          <Image src={tile.image} alt={tile.title} fill className="object-cover" />
+          <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient}`} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+          <div className="relative flex h-full flex-col justify-end gap-4 p-6">
+            <div className="text-xs uppercase tracking-[0.35em] text-white/60">Experiência Merse</div>
+            <h3 className="text-xl font-semibold text-white">{tile.title}</h3>
+            <p className="text-sm text-white/70">{tile.description}</p>
+            <span
+              className={`inline-flex w-fit items-center gap-2 rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.35em] transition ${accentClasses.secondary}`}
+            >
+              {tile.cta}
+              <span aria-hidden>→</span>
+            </span>
+          </div>
+        </div>
+      </article>
+    </Link>
+  );
+
 
   return (
     <LayoutGroup>
@@ -481,7 +653,25 @@ export default function Gerar() {
               />
             ))}
           </div>
-          <div aria-hidden className="pointer-events-none absolute inset-0 mix-blend-screen" />
+          {enableGlows && (
+            <motion.div aria-hidden className="pointer-events-none absolute inset-0 mix-blend-screen">
+              <motion.div
+                className="absolute -left-[24%] top-[10%] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.42),transparent_62%)] blur-[160px]"
+                animate={{ x: ["-24%", "110%", "-24%"], y: ["6%", "-8%", "6%"] }}
+                transition={{ duration: 24, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
+              />
+              <motion.div
+                className="absolute right-[-30%] top-[32%] h-[480px] w-[480px] rounded-full bg-[radial-gradient(circle_at_center,rgba(74,222,128,0.3),transparent_62%)] blur-[160px]"
+                animate={{ x: ["-60%", "90%", "-60%"], y: ["-6%", "12%", "-6%"] }}
+                transition={{ duration: 30, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 2.1 }}
+              />
+              <motion.div
+                className="absolute left-[6%] bottom-[-16%] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(34,197,235,0.32),transparent_62%)] blur-[170px]"
+                animate={{ x: ["-30%", "120%", "-30%"], y: ["4%", "-6%", "4%"] }}
+                transition={{ duration: 28, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 1.2 }}
+              />
+            </motion.div>
+          )}
 
         </div>
         <div className="relative z-10 space-y-10">
@@ -507,28 +697,39 @@ export default function Gerar() {
           </Link>
 
         <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {secondaryTiles.map((tile) => (
-            <Link key={tile.title} href={tile.href} className="group block">
-              <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_16px_36px_rgba(0,0,0,0.35)] transition-transform duration-500 group-hover:-translate-y-1">
-                <div className="relative h-64 w-full">
-                  <Image src={tile.image} alt={tile.title} fill className="object-cover" />
-                  <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient}`} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-                  <div className="relative flex h-full flex-col justify-end gap-4 p-6">
-                    <div className="text-xs uppercase tracking-[0.35em] text-white/60">Experiência Merse</div>
-                    <h3 className="text-xl font-semibold text-white">{tile.title}</h3>
-                    <p className="text-sm text-white/70">{tile.description}</p>
-                    <span
-                      className={`inline-flex w-fit items-center gap-2 rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.35em] transition ${accentClasses.secondary}`}
-                    >
-                      {tile.cta}
-                      <span aria-hidden>→</span>
-                    </span>
+          {objectsTile && renderExperienceTile(objectsTile)}
+          {rankingTile && renderExperienceTile(rankingTile)}
+          {runwayTile && renderExperienceTile(runwayTile)}
+          {blueprintTile && renderExperienceTile(blueprintTile)}
+          {firstCreation && (
+            <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_16px_36px_rgba(0,0,0,0.35)] md:col-span-2 xl:col-span-2 md:h-64">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/28 via-indigo-500/18 to-black/70 opacity-90" />
+              <div className="absolute -left-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+              <div className="relative grid h-full grid-cols-1 gap-4 p-6 text-white md:grid-cols-[1.1fr,0.9fr] md:items-center">
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.35em] text-purple-200/80">Primeira criação</p>
+                  <h3 className="text-2xl font-semibold md:text-3xl">Seu dia zero</h3>
+                  <p className="text-sm text-white/70">{firstCreation.description}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.34em] text-white/70">
+                    <span className="rounded-full border border-white/15 bg-white/10 px-4 py-1">Dia zero</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/60">Única</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/60">Sua estética</span>
                   </div>
                 </div>
-              </article>
-            </Link>
-          ))}
+                <div className="relative h-full min-h-[200px] overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_16px_48px_rgba(0,0,0,0.55)] md:self-center">
+                  <div className="absolute inset-0">
+                    <img src={firstCreation.imageDataUrl} alt={firstCreation.title} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-white/70">
+                    <span>Primeira imagem</span>
+                    <span>{new Date(firstCreation.createdAt).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+          )}
+          {otherTiles.map((tile) => renderExperienceTile(tile))}
         </section>
       </div>
 
@@ -549,30 +750,57 @@ export default function Gerar() {
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {moduleBlocks.map((module) => {
             const Icon = moduleIconMap[module.icon];
+            const isDownload = module.download === true;
+            if (isDownload) {
+              return (
+                <a
+                  key={module.title}
+                  href="https://github.com/3Mgalaxia/merse/releases/latest/download/Merse-arm64.dmg"
+                  download
+                  className="group block"
+                >
+                  <article className="relative h-full overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1">
+                    <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${module.accent} opacity-90`} />
+                    <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
+                    <div className="relative flex h-full flex-col gap-3 text-white">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/70 transition group-hover:border-white/40 group-hover:text-white">
+                        <Icon className="text-lg" />
+                      </span>
+                      <h4 className="text-lg font-semibold">{module.title}</h4>
+                      <p className="text-sm text-white/70">{module.description}</p>
+                      <span className="mt-auto inline-flex w-fit items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60 transition group-hover:text-white">
+                        Download rápido
+                        <span aria-hidden>→</span>
+                      </span>
+                    </div>
+                  </article>
+                </a>
+              );
+            }
             return (
-            <Link key={module.title} href={module.href} className="group block">
-              <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1">
-                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${module.accent} opacity-90`} />
-                <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
-                <div className="relative flex flex-col gap-3 text-white">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/70 transition group-hover:border-white/40 group-hover:text-white">
-                    <Icon className="text-lg" />
-                  </span>
-                  <h4 className="text-lg font-semibold">{module.title}</h4>
-                  <p className="text-sm text-white/70">{module.description}</p>
-                  <span className="mt-1 inline-flex w-fit items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60 transition group-hover:text-white">
-                    Acessar
-                    <span aria-hidden>→</span>
-                  </span>
-                </div>
-              </article>
-            </Link>
-          );
+              <Link key={module.title} href={module.href} className="group block">
+                <article className="relative h-full overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1">
+                  <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${module.accent} opacity-90`} />
+                  <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
+                  <div className="relative flex h-full flex-col gap-3 text-white">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/70 transition group-hover:border-white/40 group-hover:text-white">
+                      <Icon className="text-lg" />
+                    </span>
+                    <h4 className="text-lg font-semibold">{module.title}</h4>
+                    <p className="text-sm text-white/70">{module.description}</p>
+                    <span className="mt-auto inline-flex w-fit items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/60 transition group-hover:text-white">
+                      {module.cta ?? "Acessar"}
+                      <span aria-hidden>→</span>
+                    </span>
+                  </div>
+                </article>
+              </Link>
+            );
           })}
         </div>
       </section>
 
-      <section className="mt-12 space-y-6">
+      <section id="apis" className="mt-12 space-y-6">
         <header className="flex flex-col gap-2 text-white/80">
           <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">APIs públicas</p>
           <h3 className="text-2xl font-semibold text-white md:text-3xl">Integre direto com o laboratório Merse</h3>
@@ -582,12 +810,11 @@ export default function Gerar() {
         </header>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {apiShowcase.map((api) => (
-            <a
-              key={api.href}
-              href={api.href}
-              target="_blank"
-              rel="noreferrer"
-              className="relative block overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1"
+            <button
+              key={api.id}
+              type="button"
+              onClick={() => handleOpenApiGuide(api.id)}
+              className="group relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 text-left shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1"
             >
               <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent} opacity-85`} />
               <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
@@ -598,12 +825,104 @@ export default function Gerar() {
                 <h4 className="text-xl font-semibold">{api.title}</h4>
                 <p className="text-sm text-white/70">{api.description}</p>
                 <span className="mt-auto inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/60 transition group-hover:text-white">
-                  Abrir no Replicate <span aria-hidden>↗</span>
+                  Ver guia <span aria-hidden>→</span>
                 </span>
               </div>
-            </a>
+            </button>
           ))}
         </div>
+        <AnimatePresence>
+          {apiGuideOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 18 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.05] p-8 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
+            >
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute -right-20 -top-16 h-52 w-52 rounded-full bg-white/10 blur-[120px]" />
+                <div
+                  className={`absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-gradient-to-br ${selectedApi.accent} opacity-70 blur-[140px]`}
+                />
+              </div>
+              <div className="relative flex flex-col gap-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.35em] text-white/70">
+                      Guia de instalação
+                    </p>
+                    <h3 className="text-2xl font-semibold text-white">{selectedApi.title}</h3>
+                    <p className="text-sm text-white/70">{selectedApi.description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseApiGuide}
+                    className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/80 transition hover:border-white/35 hover:bg-white/20"
+                  >
+                    Fechar
+                  </button>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {selectedApi.command ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.35em] text-white/60">
+                        <span>Comando</span>
+                        <button
+                          type="button"
+                          onClick={handleCopyApiCommand}
+                          className={`inline-flex items-center gap-2 rounded-full border border-white/20 bg-gradient-to-r ${selectedApi.accent} px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white transition hover:border-white/40`}
+                        >
+                          {apiCopyStatus === "copied" ? (
+                            <>
+                              <PiCheckCircleFill /> Copiado
+                            </>
+                          ) : (
+                            <>
+                              <PiCopySimpleFill /> Copiar comando
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
+                        <code className="block break-all font-mono text-xs text-white/80">
+                          {selectedApi.command}
+                        </code>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/60">
+                      Comando em preparo. Em breve adicionamos a instalação desta API.
+                    </div>
+                  )}
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 01</p>
+                    <p className="mt-3 text-white">Abra o terminal</p>
+                    <p className="mt-2 text-xs text-white/60">
+                      Use o terminal do seu sistema para rodar o comando.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 02</p>
+                    <p className="mt-3 text-white">Cole o comando</p>
+                    <p className="mt-2 text-xs text-white/60">
+                      Copie o comando acima e cole no terminal.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 03</p>
+                    <p className="mt-3 text-white">Siga o assistente</p>
+                    <p className="mt-2 text-xs text-white/60">
+                      O setup cria a estrutura e prepara o endpoint.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
 
       <section className="relative mt-12 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.037] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-3xl">
@@ -701,6 +1020,7 @@ export default function Gerar() {
           </Link>
         </div>
       </section>
+
 
       <section id="prompt-marketplace" className="mt-14 space-y-6">
         <header className="flex flex-col gap-3 text-white/80 md:flex-row md:items-center md:justify-between">

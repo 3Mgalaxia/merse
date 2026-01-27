@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-type Provider = "veo" | "sora" | "merse";
+type Provider = "veo" | "sora" | "merse" | "wan" | "kling";
 
 type SuccessResponse = {
   videoUrl: string;
@@ -87,6 +87,36 @@ const PROVIDER_SETTINGS: Record<Provider, ProviderSettings> = {
     durationRange: { min: 4, max: 20, step: 2, fallback: 12 },
     buildInput: ({ prompt, aspectRatio, duration, referenceImage }) => ({
       prompt: `${prompt} | Identidade Merse oficial, partículas cósmicas, brilho neon.`,
+      aspect_ratio: aspectRatio,
+      duration,
+      image: referenceImage || undefined,
+    }),
+  },
+  wan: {
+    model: process.env.REPLICATE_WAN_VIDEO_MODEL ?? "wan-video/wan-2.6-t2v",
+    version: process.env.REPLICATE_WAN_VIDEO_MODEL_VERSION,
+    pollInterval: 2500,
+    maxAttempts: 40,
+    defaultAspect: "16:9",
+    aspectWhitelist: ["16:9", "9:16"],
+    durationRange: { min: 4, max: 16, step: 2, fallback: 10 },
+    buildInput: ({ prompt, aspectRatio, duration, referenceImage }) => ({
+      prompt: `${prompt} | Wan 2.6 t2v, ritmo Merse, câmera estável.`,
+      aspect_ratio: aspectRatio,
+      duration,
+      image: referenceImage || undefined,
+    }),
+  },
+  kling: {
+    model: process.env.REPLICATE_KLING_MODEL ?? "kwaivgi/kling-v2.5-turbo-pro",
+    version: process.env.REPLICATE_KLING_MODEL_VERSION,
+    pollInterval: 2500,
+    maxAttempts: 40,
+    defaultAspect: "16:9",
+    aspectWhitelist: ["16:9", "9:16"],
+    durationRange: { min: 4, max: 16, step: 2, fallback: 10 },
+    buildInput: ({ prompt, aspectRatio, duration, referenceImage }) => ({
+      prompt: `${prompt} | Kling v2.5 turbo pro, movimentos suaves e nitidez.`,
       aspect_ratio: aspectRatio,
       duration,
       image: referenceImage || undefined,
@@ -433,7 +463,15 @@ export default async function handler(
 
   const providerKey = typeof requestedProvider === "string" ? requestedProvider.trim().toLowerCase() : "";
   const provider: Provider =
-    providerKey === "sora" ? "sora" : providerKey === "merse" ? "merse" : "veo";
+    providerKey === "sora"
+      ? "sora"
+      : providerKey === "merse"
+      ? "merse"
+      : providerKey === "wan"
+      ? "wan"
+      : providerKey === "kling"
+      ? "kling"
+      : "veo";
 
   try {
     const result = await generateWithProvider({

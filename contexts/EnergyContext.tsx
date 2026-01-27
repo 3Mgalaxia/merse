@@ -11,7 +11,7 @@ type EnergySnapshot = {
   usage: number;
 };
 
-type GenerationProviderKey = "openai" | "flux" | "merse";
+type GenerationProviderKey = "openai" | "flux" | "merse" | "nano-banana" | "runway-gen4";
 
 type DailyUsageSnapshot = {
   date: string;

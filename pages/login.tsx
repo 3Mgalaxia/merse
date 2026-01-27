@@ -34,11 +34,12 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const redirectTo = useMemo(() => {
+  const redirectAfterLogin = useMemo(() => {
     return typeof router.query.redirect === "string" && router.query.redirect.length > 0
       ? router.query.redirect
       : "/gerar";
   }, [router.query.redirect]);
+  const redirectAfterSignup = "/merse-primeira";
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,7 +62,8 @@ export default function Login() {
       } else {
         await signup(email, password);
       }
-      await router.replace(redirectTo);
+      const destination = mode === "signup" ? redirectAfterSignup : redirectAfterLogin;
+      await router.replace(destination);
     } catch (authError) {
       setError(mapFirebaseError(authError, "Não foi possível completar a solicitação. Tente novamente."));
       setIsSubmitting(false);
@@ -116,7 +118,8 @@ export default function Login() {
               setIsSubmitting(true);
               try {
                 await signInWithGoogle();
-                await router.replace(redirectTo);
+                const destination = mode === "signup" ? redirectAfterSignup : redirectAfterLogin;
+                await router.replace(destination);
               } catch (authError) {
                 setError(
                   mapFirebaseError(authError, "Não foi possível autenticar com a conta Google agora."),
@@ -136,7 +139,8 @@ export default function Login() {
               setIsSubmitting(true);
               try {
                 await signInWithApple();
-                await router.replace(redirectTo);
+                const destination = mode === "signup" ? redirectAfterSignup : redirectAfterLogin;
+                await router.replace(destination);
               } catch (authError) {
                 setError(
                   mapFirebaseError(authError, "Não foi possível autenticar com a conta Apple agora."),

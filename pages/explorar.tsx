@@ -41,7 +41,7 @@ const destinations = [
   {
     title: "APIs Merse",
     description: "Conecte engines hospedadas no Replicate e acelere seus protótipos.",
-    href: "https://replicate.com/3mgalaxia/merse",
+    href: "/gerar#apis",
     accent: "from-cyan-400/35 via-cyan-500/24 to-teal-600/28",
     icon: PiCodeFill,
   },
@@ -71,20 +71,20 @@ const destinations = [
 const apiDetails = [
   {
     title: "Merse · Gerador de Imagem",
-    href: "https://replicate.com/3mgalaxia/merse-gerador-de-imagem",
+    href: "/gerar#apis",
     description: "Transforme prompts em renders cinematográficos no endpoint otimizado da Merse.",
     badge: "Imagem",
   },
   {
     title: "Merse · Base Criativa",
-    href: "https://replicate.com/3mgalaxia/merse",
+    href: "/gerar#apis",
     description:
       "Envie uma foto e receba a versão masculina ou feminina com estilo Merse mantendo o rosto original.",
     badge: "Gênero",
   },
   {
     title: "Merse · Gerador de Site",
-    href: "https://replicate.com/3mgalaxia/merse-gerador-de-site",
+    href: "/gerar#apis",
     description: "Receba HTML completo para landings e seções futuristas com estética Merse.",
     badge: "Sites",
   },
@@ -301,10 +301,8 @@ export default function ExplorarMerse() {
               <div className="mt-6 grid gap-5 md:grid-cols-3">
                 {apiDetails.map((api) => (
                   <a
-                    key={api.href}
+                    key={api.title}
                     href={api.href}
-                    target="_blank"
-                    rel="noreferrer"
                     className="group relative block overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4 shadow-[0_14px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:border-white/25 hover:bg-white/5"
                   >
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.35em] text-white/70">
@@ -314,7 +312,7 @@ export default function ExplorarMerse() {
                     <h4 className="mt-3 text-lg font-semibold text-white">{api.title}</h4>
                     <p className="mt-2 text-sm text-white/70">{api.description}</p>
                     <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/80 transition group-hover:border-white/40 group-hover:bg-white/15">
-                      Abrir no Replicate <span aria-hidden>↗</span>
+                      Ver guia <span aria-hidden>→</span>
                     </span>
                   </a>
                 ))}

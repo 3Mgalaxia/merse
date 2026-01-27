@@ -1,0 +1,2875 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Merse-Test • Nebula Runner (Single-File Game)</title>
+  <style>
+    /* ======================================================================
+       MERSE-TEST • NEBULA RUNNER
+       Single-file HTML game (Canvas + JS) — no assets, no libs.
+       - Space roguelite runner + shooter
+       - Procedural waves, upgrades, shop, bosses
+       - Particle FX, camera shake, slow-mo, hitstop
+       - WebAudio SFX (generated)
+       - Save/Load localStorage
+       - Debug overlay (F1)
+       ====================================================================== */
+
+    :root{
+      --bg0:#050611;
+      --bg1:#070a1a;
+      --ink:#e8ecff;
+      --muted:#aab2ff;
+      --accent:#7cf3ff;
+      --accent2:#a78bff;
+      --danger:#ff5a7a;
+      --ok:#4effb4;
+      --glass:rgba(255,255,255,.08);
+      --glass2:rgba(255,255,255,.14);
+      --stroke:rgba(255,255,255,.16);
+      --shadow:rgba(0,0,0,.55);
+      --blur:18px;
+      --r:18px;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background: radial-gradient(1200px 800px at 65% 25%, rgba(124,243,255,.12), transparent 60%),
+                  radial-gradient(900px 600px at 25% 65%, rgba(167,139,255,.12), transparent 60%),
+                  linear-gradient(160deg, var(--bg0), var(--bg1));
+      color:var(--ink);
+      overflow:hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    #wrap{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    canvas{
+      width:min(1200px, 96vw);
+      height:min(720px, 92vh);
+      border-radius:24px;
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+      background: rgba(0,0,0,.25);
+      border:1px solid rgba(255,255,255,.08);
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+    }
+
+    /* HUD overlay container */
+    #ui{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+    }
+
+    .topbar{
+      margin-top:14px;
+      width:min(1200px, 96vw);
+      display:flex;
+      gap:10px;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:22px;
+      background: linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+      border:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      box-shadow: 0 14px 45px rgba(0,0,0,.35);
+    }
+
+    .pill{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      padding:8px 12px;
+      border-radius:999px;
+      background: rgba(0,0,0,.25);
+      border:1px solid rgba(255,255,255,.10);
+    }
+
+    .dot{
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      background: var(--accent);
+      box-shadow: 0 0 16px rgba(124,243,255,.6);
+    }
+
+    .dot2{
+      background: var(--accent2);
+      box-shadow: 0 0 16px rgba(167,139,255,.6);
+    }
+
+    .dotDanger{
+      background: var(--danger);
+      box-shadow: 0 0 16px rgba(255,90,122,.6);
+    }
+
+    .k{
+      opacity:.9;
+      font-weight:700;
+      letter-spacing:.2px;
+      font-size:12px;
+      color:rgba(255,255,255,.85);
+    }
+
+    .v{
+      font-weight:800;
+      font-size:12px;
+      color:rgba(255,255,255,.95);
+    }
+
+    .hint{
+      opacity:.8;
+      font-size:12px;
+      color:rgba(255,255,255,.75);
+      text-align:right;
+      line-height:1.15;
+      padding-right:6px;
+    }
+
+    /* center modals (menus/shop/upgrade) */
+    #modal{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .panel{
+      pointer-events:auto;
+      width:min(980px, 92vw);
+      max-height:86vh;
+      overflow:auto;
+      border-radius:26px;
+      background: linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.04));
+      border:1px solid rgba(255,255,255,.14);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+      padding:18px;
+    }
+
+    .panel h1{
+      margin:0 0 8px 0;
+      font-size:22px;
+      letter-spacing:.3px;
+    }
+
+    .panel p{
+      margin:6px 0;
+      color:rgba(255,255,255,.78);
+      font-size:13px;
+      line-height:1.35;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+
+    @media (max-width: 900px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      border-radius:20px;
+      padding:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.26);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+
+    .card h3{
+      margin:0 0 8px 0;
+      font-size:14px;
+      letter-spacing:.2px;
+    }
+
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    button{
+      pointer-events:auto;
+      cursor:pointer;
+      border:none;
+      border-radius:999px;
+      padding:10px 14px;
+      font-weight:900;
+      font-size:12px;
+      letter-spacing:.4px;
+      color: rgba(255,255,255,.92);
+      background: linear-gradient(135deg, rgba(124,243,255,.22), rgba(167,139,255,.18));
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow: 0 16px 40px rgba(0,0,0,.35);
+      transition: transform .08s ease, filter .08s ease;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+
+    button:hover{ filter: brightness(1.08); }
+    button:active{ transform: translateY(1px) scale(.99); }
+
+    .btnGhost{
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+    }
+
+    .btnDanger{
+      background: linear-gradient(135deg, rgba(255,90,122,.25), rgba(124,243,255,.08));
+      border:1px solid rgba(255,90,122,.22);
+    }
+
+    .badge{
+      font-size:11px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.82);
+      display:inline-flex;
+      gap:6px;
+      align-items:center;
+    }
+
+    .sep{
+      height:1px;
+      background: rgba(255,255,255,.10);
+      margin:12px 0;
+      border-radius:999px;
+    }
+
+    .small{
+      font-size:12px;
+      opacity:.82;
+    }
+
+    .mono{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
+
+    .warn{
+      color: rgba(255,90,122,.9);
+      font-weight: 800;
+    }
+
+    .ok{
+      color: rgba(78,255,180,.9);
+      font-weight: 800;
+    }
+
+    .hide{
+      display:none !important;
+    }
+
+    /* scrollbars */
+    .panel::-webkit-scrollbar{ width:10px; }
+    .panel::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.12);
+      border-radius: 999px;
+      border:2px solid rgba(0,0,0,.15);
+    }
+    .panel::-webkit-scrollbar-track{ background: rgba(0,0,0,.10); border-radius:999px; }
+
+    /* tiny footer label */
+    #corner{
+      position:fixed;
+      left:14px;
+      bottom:12px;
+      opacity:.66;
+      font-size:11px;
+      letter-spacing:.2px;
+      color:rgba(255,255,255,.75);
+      pointer-events:none;
+      text-shadow: 0 2px 8px rgba(0,0,0,.45);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrap">
+    <canvas id="c" width="1200" height="720"></canvas>
+
+    <div id="ui">
+      <div class="topbar">
+        <div class="pill">
+          <div class="dot"></div>
+          <div class="k">MERSE-TEST</div>
+          <div class="v" id="hudTitle">NEBULA RUNNER</div>
+          <span class="badge"><span class="dot dot2" style="width:8px;height:8px"></span><span id="hudSeed" class="mono">seed: —</span></span>
+        </div>
+
+        <div class="pill">
+          <span class="badge"><span class="dot" style="width:8px;height:8px"></span><span class="mono">HP</span> <span id="hudHP" class="mono">—</span></span>
+          <span class="badge"><span class="dot dot2" style="width:8px;height:8px"></span><span class="mono">SH</span> <span id="hudShield" class="mono">—</span></span>
+          <span class="badge"><span class="dot" style="width:8px;height:8px"></span><span class="mono">DMG</span> <span id="hudDMG" class="mono">—</span></span>
+          <span class="badge"><span class="dot dot2" style="width:8px;height:8px"></span><span class="mono">FIR</span> <span id="hudFire" class="mono">—</span></span>
+          <span class="badge"><span class="dot dotDanger" style="width:8px;height:8px"></span><span class="mono">WAVE</span> <span id="hudWave" class="mono">—</span></span>
+          <span class="badge"><span class="dot" style="width:8px;height:8px"></span><span class="mono">COIN</span> <span id="hudCoin" class="mono">—</span></span>
+        </div>
+
+        <div class="hint">
+          <div><span class="mono">WASD</span> mover • <span class="mono">Mouse</span> mirar</div>
+          <div><span class="mono">Click</span> atirar • <span class="mono">Shift</span> dash • <span class="mono">Esc</span> menu</div>
+          <div><span class="mono">E</span> loja • <span class="mono">Q</span> ult • <span class="mono">F1</span> debug</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal"></div>
+  </div>
+
+  <div id="corner" class="mono">Nebula Runner • single-file • v1.0 • F1 debug</div>
+
+  <script>
+/* =================================================================================================
+   Merse-Test • Nebula Runner
+   -------------------------------------------------------------------------------------------------
+   Objetivo: sobreviver a ondas e "corridas" no espaço, destruir inimigos, pegar upgrades, vencer boss.
+   -------------------------------------------------------------------------------------------------
+   Controles:
+   - WASD: movimento
+   - Mouse: mira
+   - Click: tiro
+   - Shift: dash (invencível curto)
+   - Q: ultimate (consome carga)
+   - E: abrir loja (quando disponível)
+   - Esc: pausar/menu
+   - F1: debug overlay
+   -------------------------------------------------------------------------------------------------
+   Observações:
+   - Código intencionalmente longo (bem > 1200 linhas) para teste.
+   - Sem assets externos. Tudo desenhado no canvas.
+   - SFX gerados via WebAudio (oscillators).
+   ================================================================================================= */
+
+/* ================================================================================================
+   00) Helpers (math, random, colors, easing)
+   ================================================================================================ */
+
+(() => {
+  "use strict";
+
+  // Canvas
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: true });
+
+  // UI
+  const modal = document.getElementById("modal");
+  const hudHP = document.getElementById("hudHP");
+  const hudShield = document.getElementById("hudShield");
+  const hudDMG = document.getElementById("hudDMG");
+  const hudFire = document.getElementById("hudFire");
+  const hudWave = document.getElementById("hudWave");
+  const hudCoin = document.getElementById("hudCoin");
+  const hudSeed = document.getElementById("hudSeed");
+
+  // Device Pixel Ratio handling (optional crispness)
+  // We'll keep internal resolution fixed to 1200x720 for determinism.
+
+  // Time
+  let last = performance.now();
+  let dt = 0;
+
+  // Input
+  const keys = Object.create(null);
+  const mouse = { x: 600, y: 360, down: false, right: false, wheel: 0 };
+  const pointer = { x: 600, y: 360 }; // world pointer for aiming (same as mouse here)
+
+  // Debug
+  let DEBUG = false;
+
+  // Pause state
+  let paused = false;
+
+  // Utils
+  const TAU = Math.PI * 2;
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t){ return a + (b - a) * t; }
+  function invLerp(a, b, v){ return (v - a) / (b - a); }
+  function sat(t){ return clamp(t, 0, 1); }
+  function smoothstep(t){ t = sat(t); return t*t*(3 - 2*t); }
+  function smootherstep(t){ t = sat(t); return t*t*t*(t*(t*6 - 15) + 10); }
+  function easeOutCubic(t){ t = sat(t); return 1 - Math.pow(1 - t, 3); }
+  function easeInCubic(t){ t = sat(t); return t*t*t; }
+  function easeInOutCubic(t){ t = sat(t); return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2; }
+  function easeOutExpo(t){ t = sat(t); return t === 1 ? 1 : 1 - Math.pow(2, -10*t); }
+  function fract(x){ return x - Math.floor(x); }
+  function sign(x){ return x < 0 ? -1 : 1; }
+
+  function dist(ax, ay, bx, by){
+    const dx = bx - ax;
+    const dy = by - ay;
+    return Math.hypot(dx, dy);
+  }
+
+  function dist2(ax, ay, bx, by){
+    const dx = bx - ax;
+    const dy = by - ay;
+    return dx*dx + dy*dy;
+  }
+
+  function angleTo(ax, ay, bx, by){
+    return Math.atan2(by - ay, bx - ax);
+  }
+
+  function rotateVec(x, y, a){
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    return { x: x*ca - y*sa, y: x*sa + y*ca };
+  }
+
+  function rndRange(rng, a, b){
+    return a + (b - a) * rng();
+  }
+
+  function pick(rng, arr){
+    return arr[Math.floor(rng() * arr.length)];
+  }
+
+  // Simple seeded RNG (Mulberry32)
+  function mulberry32(seed){
+    let t = seed >>> 0;
+    return function(){
+      t += 0x6D2B79F5;
+      let x = t;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Hash string -> seed
+  function hashStringToSeed(str){
+    let h = 2166136261;
+    for(let i=0;i<str.length;i++){
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  // Color helpers
+  function rgba(r,g,b,a){ return `rgba(${r|0},${g|0},${b|0},${a})`; }
+  function hsla(h,s,l,a){ return `hsla(${h},${s}%,${l}%,${a})`; }
+
+  function glowCircle(x,y,r, color, alpha=1){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Local storage
+  const LS_KEY = "merse_test_nebula_runner_save_v1";
+
+  function safeParseJSON(s, fallback){
+    try{ return JSON.parse(s); } catch(e){ return fallback; }
+  }
+
+  /* ================================================================================================
+     01) Audio (WebAudio simple synth)
+     ================================================================================================ */
+
+  let audioCtx = null;
+  let masterGain = null;
+  let sfxEnabled = true;
+
+  function initAudio(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.22;
+    masterGain.connect(audioCtx.destination);
+  }
+
+  function playTone(freq=440, dur=0.08, type="sine", vol=0.6, detune=0, ramp=0.015){
+    if(!sfxEnabled) return;
+    if(!audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if(detune) osc.detune.setValueAtTime(detune, t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t0 + ramp);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  function playNoise(dur=0.1, vol=0.35){
+    if(!sfxEnabled) return;
+    if(!audioCtx) return;
+    const bufferSize = Math.floor(audioCtx.sampleRate * dur);
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++){
+      data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+    }
+    const src = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    src.buffer = buffer;
+    gain.gain.value = vol;
+    src.connect(gain);
+    gain.connect(masterGain);
+    src.start();
+  }
+
+  const SFX = {
+    shoot(){ playTone(880, 0.05, "square", 0.35, 0); },
+    hit(){ playTone(220, 0.06, "sawtooth", 0.35, -200); playNoise(0.05, 0.15); },
+    boom(){ playTone(90, 0.20, "sine", 0.55, -600); playNoise(0.15, 0.25); },
+    coin(){ playTone(1240, 0.05, "triangle", 0.30, 120); playTone(1560, 0.05, "triangle", 0.22, 80); },
+    dash(){ playTone(640, 0.06, "triangle", 0.25, 200); playNoise(0.06, 0.10); },
+    ui(){ playTone(980, 0.05, "sine", 0.22, 0); },
+    bad(){ playTone(180, 0.10, "square", 0.30, -250); },
+    ult(){ playTone(520, 0.18, "sawtooth", 0.35, 100); playTone(260, 0.22, "sine", 0.35, -500); },
+    boss(){ playTone(110, 0.28, "sawtooth", 0.32, -300); playNoise(0.10, 0.18); },
+  };
+
+  /* ================================================================================================
+     02) Game state
+     ================================================================================================ */
+
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Camera
+  const cam = {
+    x: 0,
+    y: 0,
+    shake: 0,
+    shakeT: 0,
+    zoom: 1,
+    targetZoom: 1,
+  };
+
+  function addShake(power=6, time=0.12){
+    cam.shake = Math.max(cam.shake, power);
+    cam.shakeT = Math.max(cam.shakeT, time);
+  }
+
+  // Global time scaling for hitstop/slowmo
+  let timeScale = 1;
+  let hitstop = 0;
+
+  // RNG seed
+  const seedStr = (new URLSearchParams(location.search).get("seed") || "MERSE-TEST-NEBULA-RUNNER");
+  const seed = hashStringToSeed(seedStr);
+  const rng = mulberry32(seed);
+  hudSeed.textContent = `seed: ${seedStr}`;
+
+  // Stars background
+  const stars = [];
+  const nebulaClouds = [];
+
+  // Entities
+  const bullets = [];
+  const enemies = [];
+  const particles = [];
+  const pickups = [];
+  const hazards = [];
+  const textPops = [];
+  const decals = []; // persistent marks
+
+  // Game flags
+  let gameOver = false;
+  let victory = false;
+
+  // Wave system
+  let wave = 1;
+  let waveTimer = 0;
+  let waveState = "intro"; // intro, fight, shop, boss, cleared
+  let shopOpen = false;
+  let shopJustSpawned = false;
+
+  // Spawn pacing
+  let spawnBudget = 0;
+  let spawnTicker = 0;
+
+  // Score & economy
+  let score = 0;
+  let coins = 0;
+
+  // Meta progression within run
+  let milestones = 0;
+
+  // Difficulty
+  const diff = {
+    baseEnemyHP: 22,
+    baseEnemySpeed: 70,
+    baseEnemyDmg: 12,
+    budgetBase: 14,
+    budgetGrowth: 6.5,
+    eliteChance: 0.02,
+    bossEvery: 5,
+    hazardChance: 0.11,
+  };
+
+  // Player
+  const player = {
+    x: W*0.35,
+    y: H*0.5,
+    r: 16,
+    vx: 0,
+    vy: 0,
+    speed: 260,
+    accel: 18,
+    drag: 0.86,
+    hpMax: 120,
+    hp: 120,
+    shieldMax: 55,
+    shield: 28,
+    shieldRegen: 10,       // per sec (out of combat)
+    shieldDelay: 1.2,      // seconds after hit
+    shieldCooldown: 0,     // countdown
+
+    dmg: 16,
+    crit: 0.05,
+    critMul: 1.8,
+
+    fireRate: 9.5,         // bullets per sec
+    spread: 0.02,
+    bulletSpeed: 760,
+    bulletLife: 1.2,
+    bulletPierce: 0,
+    bulletSize: 3.1,
+    bulletColor: "rgba(124,243,255,.9)",
+
+    onFire: 0,             // status
+    poison: 0,
+
+    dashChargesMax: 2,
+    dashCharges: 2,
+    dashCooldown: 0,
+    dashCooldownMax: 1.2,
+    dashTime: 0,
+    dashTimeMax: 0.14,
+    dashSpeed: 900,
+    invuln: 0,
+
+    ultCharge: 0,
+    ultChargeMax: 100,
+    ultReady: false,
+
+    magnet: 0,             // pickup magnet radius
+    luck: 0,               // increases drop chance
+    xp: 0,
+    level: 1,
+
+    lastShot: 0,
+    recoil: 0,
+
+    // "combat timers"
+    inCombat: 0,
+  };
+
+  // Run modifiers
+  const mods = {
+    // affects items, spawns, etc.
+    extraPickups: 0,
+    extraElite: 0,
+    greed: 0,
+    pacifist: 0,
+    berserk: 0,
+  };
+
+  /* ================================================================================================
+     03) Content tables (long on purpose: upgrades, items, waves)
+     ================================================================================================ */
+
+  // Upgrade rarities (weights)
+  const RARITIES = [
+    { id:"common",  w: 64, color:"rgba(255,255,255,.8)",  tint:"rgba(255,255,255,.07)", mult: 1.00 },
+    { id:"rare",    w: 28, color:"rgba(124,243,255,.95)", tint:"rgba(124,243,255,.10)", mult: 1.35 },
+    { id:"epic",    w: 7,  color:"rgba(167,139,255,.95)", tint:"rgba(167,139,255,.10)", mult: 1.75 },
+    { id:"mythic",  w: 1,  color:"rgba(255,90,122,.95)",  tint:"rgba(255,90,122,.12)", mult: 2.35 },
+  ];
+
+  function rollRarity(){
+    const total = RARITIES.reduce((s,r)=>s+r.w,0);
+    let t = rng() * total;
+    for(const r of RARITIES){
+      t -= r.w;
+      if(t <= 0) return r;
+    }
+    return RARITIES[0];
+  }
+
+  // Upgrades / Shop items
+  // Note: Many lines intentionally — to exceed 1200 lines.
+  const UPGRADE_POOL = [
+    // Damage & offense
+    { id:"dmg1",  name:"Amplificador de Fótons",        tag:"DANO +",      desc:"+10% dano.",                         cost: 10, apply(){ player.dmg *= 1.10; } },
+    { id:"dmg2",  name:"Núcleo de Anti-Matéria",        tag:"DANO ++",     desc:"+18% dano.",                         cost: 16, apply(){ player.dmg *= 1.18; } },
+    { id:"dmg3",  name:"Anel de Singularidade",         tag:"DANO +++",    desc:"+28% dano, -4% vida máxima.",        cost: 22, apply(){ player.dmg *= 1.28; player.hpMax *= 0.96; player.hp = Math.min(player.hp, player.hpMax); } },
+    { id:"crit1", name:"Lentes de Mira",                tag:"CRIT +",      desc:"+6% chance de crítico.",             cost: 14, apply(){ player.crit += 0.06; } },
+    { id:"crit2", name:"Matriz de Predição",            tag:"CRIT ++",     desc:"+10% chance de crítico.",            cost: 22, apply(){ player.crit += 0.10; } },
+    { id:"crit3", name:"Olho da Nebulosa",              tag:"CRIT x",      desc:"+0.6x multiplicador crítico.",       cost: 26, apply(){ player.critMul += 0.6; } },
+    { id:"fir1",  name:"Câmara de Disparo",             tag:"FIR +",       desc:"+12% taxa de tiro.",                 cost: 12, apply(){ player.fireRate *= 1.12; } },
+    { id:"fir2",  name:"Rolamentos Quânticos",          tag:"FIR ++",      desc:"+22% taxa de tiro.",                 cost: 18, apply(){ player.fireRate *= 1.22; } },
+    { id:"fir3",  name:"Overclock Estelar",             tag:"FIR +++",     desc:"+35% taxa de tiro, +6% spread.",     cost: 24, apply(){ player.fireRate *= 1.35; player.spread += 0.06; } },
+
+    // Bullets / patterns
+    { id:"spd1",  name:"Acelerador de Projéteis",       tag:"BULLET +",    desc:"+18% velocidade dos tiros.",         cost: 12, apply(){ player.bulletSpeed *= 1.18; } },
+    { id:"size1", name:"Municão Densa",                 tag:"BULLET +",    desc:"+18% tamanho do tiro.",              cost: 12, apply(){ player.bulletSize *= 1.18; } },
+    { id:"life1", name:"Reator de Alcance",             tag:"BULLET +",    desc:"+30% duração do tiro.",              cost: 12, apply(){ player.bulletLife *= 1.30; } },
+    { id:"pierce1",name:"Ponta de Plasma",              tag:"PIERCE",      desc:"Tiros atravessam +1 alvo.",          cost: 18, apply(){ player.bulletPierce += 1; } },
+    { id:"pierce2",name:"Tridente de Luz",              tag:"PIERCE+",     desc:"Tiros atravessam +2 alvos.",         cost: 28, apply(){ player.bulletPierce += 2; } },
+    { id:"spread1",name:"Bocal Triplo",                 tag:"SPRAY",       desc:"+2 projéteis por tiro (leve spread).",cost: 22, apply(){ addPerk("triple_shot"); } },
+    { id:"spread2",name:"Bocal Quíntuplo",              tag:"SPRAY+",      desc:"+4 projéteis por tiro (mais spread).",cost: 34, apply(){ addPerk("penta_shot"); } },
+    { id:"chain1", name:"Arco iônico",                  tag:"CHAIN",       desc:"Tiros têm 12% chance de arco em alvo próximo.", cost: 30, apply(){ addPerk("chain_lightning"); } },
+    { id:"ignite1",name:"Pólvora Solar",                tag:"DOT",         desc:"Tiros aplicam queimadura leve.",     cost: 16, apply(){ addPerk("ignite"); } },
+    { id:"poison1",name:"Toxina Nebular",               tag:"DOT",         desc:"Tiros aplicam veneno leve.",         cost: 16, apply(){ addPerk("poison"); } },
+
+    // Defense & sustain
+    { id:"hp1",   name:"Placas de Titânio",             tag:"HP +",        desc:"+20 vida máxima.",                   cost: 10, apply(){ player.hpMax += 20; player.hp += 20; } },
+    { id:"hp2",   name:"Armadura Meteórica",            tag:"HP ++",       desc:"+45 vida máxima.",                   cost: 18, apply(){ player.hpMax += 45; player.hp += 45; } },
+    { id:"sh1",   name:"Escudo Prismático",             tag:"SHIELD +",    desc:"+18 escudo máximo.",                 cost: 12, apply(){ player.shieldMax += 18; player.shield += 18; } },
+    { id:"sh2",   name:"Escudo Ressonante",             tag:"SHIELD ++",   desc:"+35 escudo máximo.",                 cost: 20, apply(){ player.shieldMax += 35; player.shield += 35; } },
+    { id:"regen1",name:"Nanobots Reparadores",          tag:"SUSTAIN",     desc:"Regenera +1.0 HP/s (fora de combate).",cost: 28, apply(){ addPerk("hp_regen"); } },
+    { id:"shieldRegen1",name:"Condensador de Escudo",   tag:"SUSTAIN",     desc:"+45% regen de escudo.",             cost: 16, apply(){ player.shieldRegen *= 1.45; } },
+    { id:"shieldDelay1",name:"Circuito de Resposta",    tag:"SUSTAIN",     desc:"-25% delay de regen de escudo.",     cost: 16, apply(){ player.shieldDelay *= 0.75; } },
+    { id:"thorns1",name:"Campo de Espinhos",            tag:"DEF",         desc:"Inimigos que encostam tomam dano.",   cost: 20, apply(){ addPerk("thorns"); } },
+    { id:"aegis1", name:"Égide Astral",                 tag:"DEF",         desc:"Ao cair abaixo de 30% HP, ganha escudo extra (1x por onda).", cost: 28, apply(){ addPerk("aegis"); } },
+
+    // Mobility
+    { id:"spdMove1", name:"Botas de Impulso",           tag:"MOVE +",      desc:"+10% velocidade.",                   cost: 10, apply(){ player.speed *= 1.10; } },
+    { id:"spdMove2", name:"Motor Vetorial",             tag:"MOVE ++",     desc:"+18% velocidade.",                   cost: 16, apply(){ player.speed *= 1.18; } },
+    { id:"dash1",    name:"Capacitor de Dash",          tag:"DASH",        desc:"+1 carga de dash.",                  cost: 24, apply(){ player.dashChargesMax += 1; player.dashCharges += 1; } },
+    { id:"dash2",    name:"Refinador de Cooldown",      tag:"DASH",        desc:"-20% recarga de dash.",              cost: 22, apply(){ player.dashCooldownMax *= 0.80; } },
+    { id:"dash3",    name:"Faseamento Curto",           tag:"DASH",        desc:"+0.05s invencível no dash.",         cost: 18, apply(){ player.dashTimeMax += 0.05; } },
+
+    // Economy & utility
+    { id:"magnet1",  name:"Ímã Cósmico",                tag:"UTIL",        desc:"Puxar pickups num raio maior.",      cost: 10, apply(){ player.magnet += 90; } },
+    { id:"luck1",    name:"Dado Quântico",              tag:"UTIL",        desc:"+10% sorte (mais drops).",           cost: 12, apply(){ player.luck += 0.10; } },
+    { id:"greed1",   name:"Ganância Estelar",           tag:"ECO",         desc:"+15% moedas, -8% HP.",               cost: 18, apply(){ mods.greed += 0.15; player.hpMax *= 0.92; player.hp = Math.min(player.hp, player.hpMax); } },
+    { id:"xp1",      name:"Mapa de Constelações",       tag:"META",        desc:"+22% ganho de XP.",                  cost: 16, apply(){ addPerk("xp_boost"); } },
+
+    // Specials
+    { id:"ult1",     name:"Canalizador de Supernova",   tag:"ULT",         desc:"Ultimate carrega mais rápido.",      cost: 20, apply(){ addPerk("ult_charge"); } },
+    { id:"ult2",     name:"Selo do Eclipse",            tag:"ULT",         desc:"Ultimate ganha explosão extra.",     cost: 34, apply(){ addPerk("ult_plus"); } },
+    { id:"drone1",   name:"Drone Guardião",             tag:"PET",         desc:"Um drone atira junto com você.",     cost: 38, apply(){ addPerk("drone"); } },
+    { id:"turret1",  name:"Torreta Portátil",           tag:"PET",         desc:"Invoca torreta a cada 12s.",         cost: 40, apply(){ addPerk("turret"); } },
+    { id:"orbit1",   name:"Orbes de Plasma",            tag:"AURA",        desc:"2 orbes orbitais causam dano.",      cost: 34, apply(){ addPerk("orbs"); } },
+    { id:"vamp1",    name:"Sifão de Luz",               tag:"SUSTAIN",     desc:"2% do dano vira cura.",              cost: 44, apply(){ addPerk("vamp"); } },
+  ];
+
+  // Perks are binary toggles or small state machines
+  const perks = Object.create(null);
+
+  function addPerk(id){
+    perks[id] = (perks[id] || 0) + 1;
+  }
+
+  function hasPerk(id){
+    return (perks[id] || 0) > 0;
+  }
+
+  // Shop offerings configuration
+  // (Many lines, intentionally verbose)
+  const SHOP_RULES = {
+    baseChoices: 6,
+    rerollsBase: 1,
+    rerollCost: 6,
+    healCost: 10,
+    shieldCost: 8,
+    convertCost: 18,
+    discountPerWave: 0.02,
+  };
+
+  // Enemy archetypes
+  const ENEMY_TYPES = [
+    {
+      id: "scout",
+      name: "Scout",
+      cost: 1,
+      hp: 18,
+      speed: 120,
+      r: 14,
+      dmg: 10,
+      color: "rgba(124,243,255,.85)",
+      behavior: "chase",
+      drop: 0.25,
+    },
+    {
+      id: "brute",
+      name: "Brute",
+      cost: 2,
+      hp: 46,
+      speed: 62,
+      r: 20,
+      dmg: 18,
+      color: "rgba(167,139,255,.85)",
+      behavior: "chase",
+      drop: 0.32,
+    },
+    {
+      id: "sniper",
+      name: "Sniper",
+      cost: 2,
+      hp: 28,
+      speed: 84,
+      r: 16,
+      dmg: 14,
+      color: "rgba(255,255,255,.85)",
+      behavior: "kite",
+      drop: 0.30,
+    },
+    {
+      id: "spitter",
+      name: "Spitter",
+      cost: 3,
+      hp: 38,
+      speed: 74,
+      r: 18,
+      dmg: 12,
+      color: "rgba(255,90,122,.85)",
+      behavior: "spit",
+      drop: 0.35,
+    },
+    {
+      id: "orbiter",
+      name: "Orbiter",
+      cost: 3,
+      hp: 34,
+      speed: 92,
+      r: 16,
+      dmg: 11,
+      color: "rgba(124,243,255,.7)",
+      behavior: "orbit",
+      drop: 0.30,
+    },
+    {
+      id: "tank",
+      name: "Tank",
+      cost: 4,
+      hp: 88,
+      speed: 52,
+      r: 24,
+      dmg: 22,
+      color: "rgba(167,139,255,.7)",
+      behavior: "chase",
+      drop: 0.42,
+    },
+    {
+      id: "leech",
+      name: "Leech",
+      cost: 4,
+      hp: 44,
+      speed: 110,
+      r: 16,
+      dmg: 14,
+      color: "rgba(78,255,180,.78)",
+      behavior: "leech",
+      drop: 0.38,
+    },
+  ];
+
+  // Boss definitions
+  const BOSSES = [
+    {
+      id: "eclipse_wyrm",
+      name: "Eclipse Wyrm",
+      hp: 740,
+      r: 46,
+      speed: 64,
+      color: "rgba(255,90,122,.9)",
+      phases: [
+        { at: 0.75, mode: "dash_slash", rate: 1.0 },
+        { at: 0.45, mode: "bullet_spiral", rate: 1.2 },
+        { at: 0.20, mode: "meteor_rain", rate: 1.3 },
+      ],
+    },
+    {
+      id: "nebula_mind",
+      name: "Nebula Mind",
+      hp: 860,
+      r: 52,
+      speed: 58,
+      color: "rgba(124,243,255,.9)",
+      phases: [
+        { at: 0.70, mode: "orbit_minions", rate: 1.0 },
+        { at: 0.40, mode: "laser_sweep", rate: 1.2 },
+        { at: 0.18, mode: "gravity_well", rate: 1.35 },
+      ],
+    },
+  ];
+
+  // Flavor text (lots of lines)
+  const LORE_LINES = [
+    "Você acorda no limite da nebulosa. Tudo vibra.",
+    "Uma frequência desconhecida atravessa o casco.",
+    "O painel pisca: 'SINAL • MERSE-TEST'.",
+    "Seu motor responde como se já conhecesse o caminho.",
+    "O espaço aqui não é vazio: é um oceano com correntes.",
+    "Quando você dispara, a luz deixa rastros de memória.",
+    "Cada onda parece uma pergunta. Cada inimigo, uma dúvida.",
+    "Mas você não está sozinho. Há algo observando.",
+    "Você chama isso de 'Runner'. A nebulosa chama de 'eco'.",
+    "Ao longe, um eclipse se fecha como uma pálpebra.",
+    "A loja aparece como miragem — mas as moedas são reais.",
+    "O tempo desacelera quando o impacto é perfeito.",
+    "Se você vencer, a Merse-Test vai lembrar.",
+    "Se você cair, a Merse-Test vai tentar de novo.",
+    "O universo não julga. Ele simula."
+  ];
+
+  /* ================================================================================================
+     04) Background generation (stars + nebula)
+     ================================================================================================ */
+
+  function initBackground(){
+    stars.length = 0;
+    nebulaClouds.length = 0;
+
+    // Stars
+    const starCount = 520;
+    for(let i=0;i<starCount;i++){
+      const z = rng()*1;
+      stars.push({
+        x: rng()*W,
+        y: rng()*H,
+        z,
+        r: lerp(0.3, 1.8, 1 - z),
+        a: lerp(0.15, 0.85, 1 - z),
+        tw: rng()*TAU,
+        sp: lerp(0.2, 1.2, 1 - z),
+      });
+    }
+
+    // Nebula clouds (soft blobs)
+    const cloudCount = 38;
+    for(let i=0;i<cloudCount;i++){
+      const hue = pick(rng, [195, 205, 265, 285, 330, 175]);
+      nebulaClouds.push({
+        x: rng()*W,
+        y: rng()*H,
+        r: rndRange(rng, 120, 380),
+        a: rndRange(rng, 0.05, 0.16),
+        hue,
+        drift: rndRange(rng, -8, 8),
+      });
+    }
+  }
+
+  initBackground();
+
+  /* ================================================================================================
+     05) UI Modals (menu, shop, pause, game over)
+     ================================================================================================ */
+
+  function clearModal(){
+    modal.innerHTML = "";
+  }
+
+  function showPanel(html){
+    modal.innerHTML = `<div class="panel">${html}</div>`;
+  }
+
+  function buttonEl(label, cls=""){
+    return `<button class="${cls}" data-btn="${label}">${label}</button>`;
+  }
+
+  function openMainMenu(){
+    paused = true;
+    shopOpen = false;
+    const lore = pick(rng, LORE_LINES);
+
+    showPanel(`
+      <h1>NEBULA RUNNER <span class="badge"><span class="mono">MERSE-TEST</span></span></h1>
+      <p>${lore}</p>
+      <div class="sep"></div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>▶️ Iniciar / Continuar</h3>
+          <p class="small">Começa a run com seed atual. Você pode passar <span class="mono">?seed=qualquer</span> na URL.</p>
+          <div class="row">
+            ${buttonEl("JOGAR", "")}
+            ${buttonEl("REINICIAR", "btnDanger")}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>⚙️ Opções</h3>
+          <p class="small">Áudio e acessibilidade.</p>
+          <div class="row">
+            ${buttonEl(sfxEnabled ? "SFX: ON" : "SFX: OFF", "btnGhost")}
+            ${buttonEl(DEBUG ? "DEBUG: ON" : "DEBUG: OFF", "btnGhost")}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>💾 Save</h3>
+          <p class="small">Salva e carrega o estado atual (localStorage).</p>
+          <div class="row">
+            ${buttonEl("SALVAR", "btnGhost")}
+            ${buttonEl("CARREGAR", "btnGhost")}
+            ${buttonEl("APAGAR SAVE", "btnDanger")}
+          </div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+      <p class="mono small">Dicas: <span class="ok">Shift</span> para dash (invencível), <span class="ok">Q</span> para ultimate, <span class="ok">E</span> abre loja quando disponível.</p>
+      <p class="mono small">Fechar menu: <span class="ok">Esc</span></p>
+    `);
+
+    hookPanelButtons();
+  }
+
+  function openPauseMenu(){
+    paused = true;
+    shopOpen = false;
+
+    showPanel(`
+      <h1>PAUSADO</h1>
+      <p>O universo espera.</p>
+      <div class="sep"></div>
+      <div class="grid">
+        <div class="card">
+          <h3>▶️ Retomar</h3>
+          <p class="small">Voltar para a corrida.</p>
+          <div class="row">${buttonEl("RETOMAR")}</div>
+        </div>
+        <div class="card">
+          <h3>🛒 Loja</h3>
+          <p class="small">Abrir loja (se liberada nesta onda).</p>
+          <div class="row">
+            ${buttonEl("ABRIR LOJA", "btnGhost")}
+          </div>
+        </div>
+        <div class="card">
+          <h3>⚙️ Opções</h3>
+          <p class="small">SFX e debug.</p>
+          <div class="row">
+            ${buttonEl(sfxEnabled ? "SFX: ON" : "SFX: OFF", "btnGhost")}
+            ${buttonEl(DEBUG ? "DEBUG: ON" : "DEBUG: OFF", "btnGhost")}
+          </div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="row">
+        ${buttonEl("SALVAR", "btnGhost")}
+        ${buttonEl("REINICIAR", "btnDanger")}
+      </div>
+    `);
+
+    hookPanelButtons();
+  }
+
+  function openGameOver(){
+    paused = true;
+    shopOpen = false;
+
+    showPanel(`
+      <h1 class="warn">GAME OVER</h1>
+      <p>Você caiu na onda <span class="mono">${wave}</span>. Score: <span class="mono">${score|0}</span>.</p>
+      <div class="sep"></div>
+      <div class="grid">
+        <div class="card">
+          <h3>🔁 Tentar de novo</h3>
+          <p class="small">Reinicia a run com o mesmo seed.</p>
+          <div class="row">${buttonEl("REINICIAR", "btnDanger")}</div>
+        </div>
+        <div class="card">
+          <h3>🏠 Menu</h3>
+          <p class="small">Voltar ao menu principal.</p>
+          <div class="row">${buttonEl("MENU", "btnGhost")}</div>
+        </div>
+        <div class="card">
+          <h3>💾 Save</h3>
+          <p class="small">Carregar seu último save.</p>
+          <div class="row">
+            ${buttonEl("CARREGAR", "btnGhost")}
+          </div>
+        </div>
+      </div>
+    `);
+
+    hookPanelButtons();
+  }
+
+  function openVictory(){
+    paused = true;
+    shopOpen = false;
+
+    showPanel(`
+      <h1 class="ok">VITÓRIA</h1>
+      <p>Você atravessou o coração da nebulosa. O eclipse abriu caminho.</p>
+      <p class="small mono">Wave: ${wave} • Score: ${score|0} • Coins: ${coins|0}</p>
+      <div class="sep"></div>
+      <div class="grid">
+        <div class="card">
+          <h3>✨ Continuar infinito</h3>
+          <p class="small">Continue no modo endless (dificuldade cresce).</p>
+          <div class="row">${buttonEl("ENDLESS", "")}</div>
+        </div>
+        <div class="card">
+          <h3>🔁 Reiniciar</h3>
+          <p class="small">Nova run (mesmo seed).</p>
+          <div class="row">${buttonEl("REINICIAR", "btnDanger")}</div>
+        </div>
+        <div class="card">
+          <h3>🏠 Menu</h3>
+          <p class="small">Voltar ao menu.</p>
+          <div class="row">${buttonEl("MENU", "btnGhost")}</div>
+        </div>
+      </div>
+    `);
+
+    hookPanelButtons();
+  }
+
+  // Shop UI
+  let shop = {
+    offers: [],
+    rerolls: SHOP_RULES.rerollsBase,
+    waveAt: 0,
+    open: false,
+  };
+
+  function makeOffer(){
+    const rarity = rollRarity();
+    // choose an item not already in offers
+    let tries = 0;
+    let item = null;
+    while(tries++ < 40){
+      const candidate = pick(rng, UPGRADE_POOL);
+      if(!shop.offers.find(o => o.item.id === candidate.id)){
+        item = candidate;
+        break;
+      }
+    }
+    if(!item) item = pick(rng, UPGRADE_POOL);
+
+    const discount = 1 - clamp(SHOP_RULES.discountPerWave * wave, 0, 0.35);
+    const baseCost = item.cost * rarity.mult;
+    const finalCost = Math.max(1, Math.round(baseCost * discount));
+
+    return {
+      id: `${item.id}_${Math.floor(rng()*1e9)}`,
+      item,
+      rarity,
+      cost: finalCost,
+      bought: false,
+    };
+  }
+
+  function buildShopOffers(){
+    shop.offers = [];
+    shop.rerolls = SHOP_RULES.rerollsBase + Math.floor(wave/4);
+    shop.waveAt = wave;
+
+    const choices = SHOP_RULES.baseChoices + Math.floor(wave/6);
+    for(let i=0;i<choices;i++){
+      shop.offers.push(makeOffer());
+    }
+  }
+
+  function openShop(){
+    if(shopOpen) return;
+    shopOpen = true;
+    paused = true;
+    shop.open = true;
+
+    if(!shopJustSpawned){
+      // If opened manually, ensure offers exist for this wave
+      if(shop.waveAt !== wave || shop.offers.length === 0){
+        buildShopOffers();
+      }
+    }
+    shopJustSpawned = false;
+
+    renderShopPanel();
+    SFX.ui();
+  }
+
+  function closeShop(){
+    shopOpen = false;
+    shop.open = false;
+    clearModal();
+    paused = false;
+    SFX.ui();
+  }
+
+  function renderShopPanel(){
+    const offersHtml = shop.offers.map((o, idx) => {
+      const owned = o.bought;
+      const canBuy = !owned && coins >= o.cost;
+      const r = o.rarity;
+
+      const badge = `<span class="badge" style="background:${r.tint};border-color:rgba(255,255,255,.14);color:${r.color}"><span class="mono">${r.id}</span></span>`;
+      const title = `${badge} <span class="mono">${o.item.name}</span>`;
+      const tag = `<span class="badge"><span class="mono">${o.item.tag}</span></span>`;
+      const price = `<span class="badge"><span class="mono">💠 ${o.cost}</span></span>`;
+
+      const btn = owned
+        ? `<button class="btnGhost" disabled style="opacity:.55;cursor:not-allowed">COMPRADO</button>`
+        : canBuy
+          ? `<button data-buy="${o.id}">COMPRAR</button>`
+          : `<button class="btnGhost" data-buy="${o.id}">SEM MOEDAS</button>`;
+
+      return `
+        <div class="card">
+          <h3>${title}</h3>
+          <p class="small">${o.item.desc}</p>
+          <div class="row">${tag} ${price} ${btn}</div>
+        </div>
+      `;
+    }).join("");
+
+    const canReroll = shop.rerolls > 0 && coins >= SHOP_RULES.rerollCost;
+    const rerollBtn = canReroll
+      ? `<button data-act="REROLL">REROLL (-${SHOP_RULES.rerollCost})</button>`
+      : `<button class="btnGhost" data-act="REROLL">${shop.rerolls>0 ? `REROLL (-${SHOP_RULES.rerollCost})` : "SEM REROLL"}</button>`;
+
+    const healBtn = (coins >= SHOP_RULES.healCost && player.hp < player.hpMax)
+      ? `<button data-act="HEAL">CURAR (-${SHOP_RULES.healCost})</button>`
+      : `<button class="btnGhost" data-act="HEAL">CURAR (-${SHOP_RULES.healCost})</button>`;
+
+    const shBtn = (coins >= SHOP_RULES.shieldCost && player.shield < player.shieldMax)
+      ? `<button data-act="SHIELD">ESCUDO (-${SHOP_RULES.shieldCost})</button>`
+      : `<button class="btnGhost" data-act="SHIELD">ESCUDO (-${SHOP_RULES.shieldCost})</button>`;
+
+    const convertBtn = (coins >= SHOP_RULES.convertCost)
+      ? `<button data-act="CONVERT">CONVERTER (-${SHOP_RULES.convertCost})</button>`
+      : `<button class="btnGhost" data-act="CONVERT">CONVERTER (-${SHOP_RULES.convertCost})</button>`;
+
+    showPanel(`
+      <h1>LOJA DA NEBULOSA <span class="badge"><span class="mono">wave ${wave}</span></span></h1>
+      <p>Gaste <span class="mono">💠 coins</span> em upgrades. Algumas escolhas são raras e mudam o jogo.</p>
+      <p class="small mono">Coins: ${coins|0} • Rerolls: ${shop.rerolls|0} • Perks: ${Object.keys(perks).length}</p>
+
+      <div class="sep"></div>
+
+      <div class="row">
+        ${rerollBtn}
+        ${healBtn}
+        ${shBtn}
+        ${convertBtn}
+        <button class="btnGhost" data-act="CLOSE">FECHAR</button>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="grid">${offersHtml}</div>
+
+      <div class="sep"></div>
+      <p class="small mono">Dica: depois da loja, a próxima onda começa automaticamente. Você pode fechar e voltar quando quiser enquanto a loja estiver liberada.</p>
+    `);
+
+    hookPanelButtons();
+  }
+
+  function hookPanelButtons(){
+    const panel = modal.querySelector(".panel");
+    if(!panel) return;
+
+    panel.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const label = btn.getAttribute("data-btn");
+        const buyId = btn.getAttribute("data-buy");
+        const act = btn.getAttribute("data-act");
+
+        initAudio();
+        audioCtx.resume?.().catch(()=>{});
+
+        if(buyId){
+          const offer = shop.offers.find(o => o.id === buyId);
+          if(!offer) return;
+          if(offer.bought) return;
+          if(coins < offer.cost){ SFX.bad(); return; }
+          coins -= offer.cost;
+          offer.bought = true;
+          offer.item.apply();
+          SFX.ui();
+          textPop(player.x, player.y-40, `+ ${offer.item.tag}`, offer.rarity.color);
+          renderShopPanel();
+          return;
+        }
+
+        if(act){
+          if(act === "CLOSE"){ closeShop(); return; }
+          if(act === "REROLL"){
+            if(shop.rerolls <= 0){ SFX.bad(); return; }
+            if(coins < SHOP_RULES.rerollCost){ SFX.bad(); return; }
+            coins -= SHOP_RULES.rerollCost;
+            shop.rerolls -= 1;
+            buildShopOffers();
+            SFX.ui();
+            renderShopPanel();
+            return;
+          }
+          if(act === "HEAL"){
+            if(coins < SHOP_RULES.healCost){ SFX.bad(); return; }
+            if(player.hp >= player.hpMax){ SFX.bad(); return; }
+            coins -= SHOP_RULES.healCost;
+            const amt = Math.min(player.hpMax - player.hp, 40);
+            player.hp += amt;
+            SFX.ui();
+            textPop(player.x, player.y-40, `+${amt|0} HP`, "rgba(78,255,180,.95)");
+            renderShopPanel();
+            return;
+          }
+          if(act === "SHIELD"){
+            if(coins < SHOP_RULES.shieldCost){ SFX.bad(); return; }
+            if(player.shield >= player.shieldMax){ SFX.bad(); return; }
+            coins -= SHOP_RULES.shieldCost;
+            const amt = Math.min(player.shieldMax - player.shield, 28);
+            player.shield += amt;
+            SFX.ui();
+            textPop(player.x, player.y-40, `+${amt|0} SH`, "rgba(124,243,255,.95)");
+            renderShopPanel();
+            return;
+          }
+          if(act === "CONVERT"){
+            if(coins < SHOP_RULES.convertCost){ SFX.bad(); return; }
+            coins -= SHOP_RULES.convertCost;
+            // Convert coins into ult charge + small heal
+            const u = 45;
+            player.ultCharge = Math.min(player.ultChargeMax, player.ultCharge + u);
+            player.hp = Math.min(player.hpMax, player.hp + 12);
+            SFX.ui();
+            textPop(player.x, player.y-40, `ULT +${u}`, "rgba(167,139,255,.95)");
+            renderShopPanel();
+            return;
+          }
+        }
+
+        if(label){
+          if(label === "JOGAR"){ clearModal(); paused = false; gameOver = false; victory = false; SFX.ui(); return; }
+          if(label === "RETOMAR"){ clearModal(); paused = false; SFX.ui(); return; }
+          if(label === "ABRIR LOJA"){ if(waveState==="shop" || shopOpenAllowed()) openShop(); else SFX.bad(); return; }
+          if(label === "REINICIAR"){ resetRun(true); clearModal(); paused = false; SFX.ui(); return; }
+          if(label === "MENU"){ openMainMenu(); SFX.ui(); return; }
+          if(label === "SALVAR"){ saveGame(); SFX.ui(); return; }
+          if(label === "CARREGAR"){ loadGame(); clearModal(); paused = false; SFX.ui(); return; }
+          if(label === "APAGAR SAVE"){ localStorage.removeItem(LS_KEY); SFX.ui(); openMainMenu(); return; }
+          if(label.startsWith("SFX:")){
+            sfxEnabled = !sfxEnabled;
+            SFX.ui();
+            // refresh menu text
+            if(paused && !shopOpen){
+              if(gameOver) openGameOver();
+              else if(victory) openVictory();
+              else openPauseMenu();
+            } else {
+              openMainMenu();
+            }
+            return;
+          }
+          if(label.startsWith("DEBUG:")){
+            DEBUG = !DEBUG;
+            SFX.ui();
+            openMainMenu();
+            return;
+          }
+          if(label === "ENDLESS"){
+            victory = false;
+            paused = false;
+            clearModal();
+            // continue waves
+            SFX.ui();
+            return;
+          }
+        }
+      });
+    });
+  }
+
+  function shopOpenAllowed(){
+    return (waveState === "shop" || waveState === "intro") && !gameOver && !victory;
+  }
+
+  /* ================================================================================================
+     06) Save / Load
+     ================================================================================================ */
+
+  function saveGame(){
+    const data = {
+      seedStr,
+      seed,
+      wave,
+      waveTimer,
+      waveState,
+      score,
+      coins,
+      milestones,
+      player: {
+        x: player.x, y: player.y,
+        hpMax: player.hpMax, hp: player.hp,
+        shieldMax: player.shieldMax, shield: player.shield,
+        dmg: player.dmg,
+        crit: player.crit,
+        critMul: player.critMul,
+        fireRate: player.fireRate,
+        spread: player.spread,
+        bulletSpeed: player.bulletSpeed,
+        bulletLife: player.bulletLife,
+        bulletPierce: player.bulletPierce,
+        bulletSize: player.bulletSize,
+        dashChargesMax: player.dashChargesMax,
+        dashCharges: player.dashCharges,
+        dashCooldownMax: player.dashCooldownMax,
+        dashTimeMax: player.dashTimeMax,
+        magnet: player.magnet,
+        luck: player.luck,
+        ultCharge: player.ultCharge,
+        ultChargeMax: player.ultChargeMax,
+        level: player.level,
+        xp: player.xp,
+        speed: player.speed,
+        shieldRegen: player.shieldRegen,
+        shieldDelay: player.shieldDelay,
+      },
+      perks,
+      mods,
+      shop: {
+        offers: shop.offers.map(o => ({
+          id: o.id, cost: o.cost, bought: o.bought,
+          rarity: o.rarity.id,
+          itemId: o.item.id,
+        })),
+        rerolls: shop.rerolls,
+        waveAt: shop.waveAt,
+      },
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+  }
+
+  function loadGame(){
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw){ SFX.bad(); return; }
+    const data = safeParseJSON(raw, null);
+    if(!data){ SFX.bad(); return; }
+
+    // restore basics
+    wave = data.wave ?? 1;
+    waveTimer = data.waveTimer ?? 0;
+    waveState = data.waveState ?? "intro";
+    score = data.score ?? 0;
+    coins = data.coins ?? 0;
+    milestones = data.milestones ?? 0;
+
+    // restore player
+    const p = data.player || {};
+    Object.assign(player, {
+      x: p.x ?? W*0.35,
+      y: p.y ?? H*0.5,
+      hpMax: p.hpMax ?? 120,
+      hp: p.hp ?? 120,
+      shieldMax: p.shieldMax ?? 55,
+      shield: p.shield ?? 28,
+      dmg: p.dmg ?? 16,
+      crit: p.crit ?? 0.05,
+      critMul: p.critMul ?? 1.8,
+      fireRate: p.fireRate ?? 9.5,
+      spread: p.spread ?? 0.02,
+      bulletSpeed: p.bulletSpeed ?? 760,
+      bulletLife: p.bulletLife ?? 1.2,
+      bulletPierce: p.bulletPierce ?? 0,
+      bulletSize: p.bulletSize ?? 3.1,
+      dashChargesMax: p.dashChargesMax ?? 2,
+      dashCharges: p.dashCharges ?? 2,
+      dashCooldownMax: p.dashCooldownMax ?? 1.2,
+      dashTimeMax: p.dashTimeMax ?? 0.14,
+      magnet: p.magnet ?? 0,
+      luck: p.luck ?? 0,
+      ultCharge: p.ultCharge ?? 0,
+      ultChargeMax: p.ultChargeMax ?? 100,
+      level: p.level ?? 1,
+      xp: p.xp ?? 0,
+      speed: p.speed ?? 260,
+      shieldRegen: p.shieldRegen ?? 10,
+      shieldDelay: p.shieldDelay ?? 1.2,
+    });
+
+    // perks
+    for(const k in perks) delete perks[k];
+    if(data.perks){
+      for(const k of Object.keys(data.perks)){
+        perks[k] = data.perks[k];
+      }
+    }
+
+    // mods
+    if(data.mods){
+      for(const k of Object.keys(mods)){
+        mods[k] = data.mods[k] ?? mods[k];
+      }
+    }
+
+    // shop
+    if(data.shop){
+      shop.rerolls = data.shop.rerolls ?? SHOP_RULES.rerollsBase;
+      shop.waveAt = data.shop.waveAt ?? wave;
+      shop.offers = [];
+      const offers = data.shop.offers || [];
+      for(const o of offers){
+        const item = UPGRADE_POOL.find(i => i.id === o.itemId) || pick(rng, UPGRADE_POOL);
+        const rarity = RARITIES.find(r => r.id === o.rarity) || RARITIES[0];
+        shop.offers.push({
+          id: o.id,
+          item,
+          rarity,
+          cost: o.cost ?? item.cost,
+          bought: !!o.bought,
+        });
+      }
+    }
+
+    // clear entities
+    bullets.length = 0;
+    enemies.length = 0;
+    particles.length = 0;
+    pickups.length = 0;
+    hazards.length = 0;
+    textPops.length = 0;
+    decals.length = 0;
+
+    gameOver = false;
+    victory = false;
+    paused = false;
+  }
+
+  /* ================================================================================================
+     07) Entity spawns
+     ================================================================================================ */
+
+  function spawnEnemy(typeId, x, y, elite=false){
+    const base = ENEMY_TYPES.find(t => t.id === typeId) || pick(rng, ENEMY_TYPES);
+
+    const hpScale = 1 + 0.10*(wave-1);
+    const spScale = 1 + 0.04*(wave-1);
+    const dmgScale = 1 + 0.08*(wave-1);
+
+    const e = {
+      id: `${base.id}_${Math.floor(rng()*1e9)}`,
+      type: base.id,
+      name: base.name,
+      x, y,
+      vx: 0, vy: 0,
+      r: base.r * (elite ? 1.15 : 1.0),
+      hpMax: base.hp * hpScale * (elite ? 1.55 : 1.0),
+      hp: base.hp * hpScale * (elite ? 1.55 : 1.0),
+      speed: base.speed * spScale * (elite ? 1.12 : 1.0),
+      dmg: base.dmg * dmgScale * (elite ? 1.25 : 1.0),
+      color: base.color,
+      behavior: base.behavior,
+      drop: base.drop + (elite ? 0.18 : 0) + player.luck*0.18,
+      elite,
+      t: 0,
+      cd: 0,
+      orbitA: rng()*TAU,
+      orbitR: rndRange(rng, 140, 240),
+      leechT: 0,
+      status: {
+        burn: 0,
+        poison: 0,
+        slow: 0,
+      },
+      inv: 0,
+    };
+
+    enemies.push(e);
+
+    // Spawn puff
+    for(let i=0;i<16;i++){
+      particle({
+        x, y,
+        vx: rndRange(rng, -120, 120),
+        vy: rndRange(rng, -120, 120),
+        r: rndRange(rng, 1.2, 3.2),
+        life: rndRange(rng, 0.35, 0.75),
+        color: elite ? "rgba(255,90,122,.55)" : "rgba(124,243,255,.35)",
+        glow: 1.0,
+      });
+    }
+  }
+
+  function spawnPickup(kind, x, y, amount=1){
+    pickups.push({
+      kind,
+      x, y,
+      vx: rndRange(rng, -70, 70),
+      vy: rndRange(rng, -70, 70),
+      r: kind === "coin" ? 8 : 10,
+      t: 0,
+      life: 18,
+      amount,
+    });
+  }
+
+  function spawnHazard(kind, x, y){
+    hazards.push({
+      kind,
+      x, y,
+      r: kind === "mine" ? 22 : 40,
+      t: 0,
+      life: kind === "mine" ? 999 : 9,
+      armed: kind === "mine" ? 0.8 : 0,
+      dmg: kind === "mine" ? 26 : 14,
+      pulse: 0,
+    });
+  }
+
+  function spawnBoss(){
+    const bossDef = pick(rng, BOSSES);
+    const b = {
+      boss: true,
+      id: bossDef.id,
+      name: bossDef.name,
+      x: W*0.82,
+      y: H*0.5,
+      vx: 0, vy: 0,
+      r: bossDef.r,
+      hpMax: bossDef.hp * (1 + 0.12*(wave-1)),
+      hp: bossDef.hp * (1 + 0.12*(wave-1)),
+      speed: bossDef.speed * (1 + 0.03*(wave-1)),
+      dmg: 28 * (1 + 0.08*(wave-1)),
+      color: bossDef.color,
+      phases: bossDef.phases,
+      phase: 0,
+      t: 0,
+      cd: 0,
+      inv: 0,
+      aura: 0,
+      mode: "intro",
+      introT: 2.0,
+      status: { burn:0, poison:0, slow:0 },
+    };
+    enemies.push(b);
+    SFX.boss();
+    addShake(12, 0.35);
+    textPop(W*0.5, H*0.25, `BOSS: ${b.name}`, "rgba(255,90,122,.95)", 1.5);
+  }
+
+  /* ================================================================================================
+     08) Particles / text pops / decals
+     ================================================================================================ */
+
+  function particle(p){
+    particles.push({
+      x: p.x, y: p.y,
+      vx: p.vx || 0,
+      vy: p.vy || 0,
+      r: p.r || 2,
+      life: p.life || 0.5,
+      t: 0,
+      color: p.color || "rgba(255,255,255,.4)",
+      glow: p.glow || 0,
+      drag: p.drag ?? 0.98,
+      grav: p.grav ?? 0,
+      shape: p.shape || "circle",
+    });
+  }
+
+  function textPop(x,y,text,color="rgba(255,255,255,.9)", scale=1){
+    textPops.push({
+      x,y,text,color,
+      t:0,
+      life: 1.1,
+      scale,
+      vy: -28,
+    });
+  }
+
+  function decal(x,y){
+    decals.push({
+      x,y,
+      r: rndRange(rng, 18, 54),
+      a: rndRange(rng, 0.06, 0.12),
+      hue: pick(rng,[195,265,285,330]),
+      t:0,
+      life: rndRange(rng, 10, 22),
+    });
+  }
+
+  /* ================================================================================================
+     09) Combat: Shooting, damage, collisions
+     ================================================================================================ */
+
+  function fireBullet(px, py, ang, dmgMul=1){
+    const sp = player.bulletSpeed;
+    const vx = Math.cos(ang) * sp;
+    const vy = Math.sin(ang) * sp;
+
+    bullets.push({
+      x: px, y: py,
+      vx, vy,
+      r: player.bulletSize,
+      t: 0,
+      life: player.bulletLife,
+      dmg: player.dmg * dmgMul,
+      pierce: player.bulletPierce,
+      color: player.bulletColor,
+      from: "player",
+    });
+
+    // muzzle
+    for(let i=0;i<6;i++){
+      particle({
+        x: px + Math.cos(ang)*6,
+        y: py + Math.sin(ang)*6,
+        vx: vx*0.05 + rndRange(rng, -60, 60),
+        vy: vy*0.05 + rndRange(rng, -60, 60),
+        r: rndRange(rng, 1.0, 2.5),
+        life: rndRange(rng, 0.12, 0.22),
+        color: "rgba(124,243,255,.55)",
+        glow: 1,
+      });
+    }
+
+    player.recoil = Math.min(12, player.recoil + 1.6);
+    SFX.shoot();
+  }
+
+  function enemyShoot(e, ang, speed=420, size=4.2, life=2.2, dmg=12, color="rgba(255,90,122,.85)"){
+    bullets.push({
+      x: e.x, y: e.y,
+      vx: Math.cos(ang)*speed,
+      vy: Math.sin(ang)*speed,
+      r: size,
+      t: 0,
+      life,
+      dmg,
+      pierce: 0,
+      color,
+      from: "enemy",
+    });
+    for(let i=0;i<6;i++){
+      particle({
+        x: e.x, y: e.y,
+        vx: Math.cos(ang)*speed*0.05 + rndRange(rng, -60, 60),
+        vy: Math.sin(ang)*speed*0.05 + rndRange(rng, -60, 60),
+        r: rndRange(rng, 1.0, 2.4),
+        life: rndRange(rng, 0.10, 0.18),
+        color: "rgba(255,90,122,.45)",
+        glow: 1,
+      });
+    }
+  }
+
+  function applyDamageToPlayer(dmg, srcX, srcY){
+    if(player.invuln > 0) return;
+
+    player.inCombat = 2.0;
+    player.shieldCooldown = player.shieldDelay;
+
+    // Aegis perk
+    if(hasPerk("aegis")){
+      if(!player._aegisUsedThisWave) player._aegisUsedThisWave = false;
+      const hpPct = player.hp / player.hpMax;
+      if(hpPct < 0.30 && !player._aegisUsedThisWave){
+        player._aegisUsedThisWave = true;
+        player.shield = Math.min(player.shieldMax + 40, player.shield + 40);
+        textPop(player.x, player.y-40, "Aegis!", "rgba(167,139,255,.95)");
+        SFX.ui();
+      }
+    }
+
+    let left = dmg;
+    if(player.shield > 0){
+      const s = Math.min(player.shield, left);
+      player.shield -= s;
+      left -= s;
+    }
+    if(left > 0){
+      player.hp -= left;
+    }
+
+    addShake(8, 0.14);
+    hitstop = Math.max(hitstop, 0.045);
+    timeScale = Math.min(timeScale, 0.72);
+
+    // blood-ish particles
+    const ang = angleTo(srcX, srcY, player.x, player.y);
+    for(let i=0;i<18;i++){
+      const a = ang + rndRange(rng, -0.9, 0.9);
+      const sp = rndRange(rng, 80, 260);
+      particle({
+        x: player.x + Math.cos(a)*player.r*0.5,
+        y: player.y + Math.sin(a)*player.r*0.5,
+        vx: Math.cos(a)*sp,
+        vy: Math.sin(a)*sp,
+        r: rndRange(rng, 1.4, 3.6),
+        life: rndRange(rng, 0.25, 0.65),
+        color: "rgba(255,90,122,.55)",
+        glow: 0.6,
+        drag: 0.96,
+      });
+    }
+
+    SFX.hit();
+
+    if(player.hp <= 0){
+      player.hp = 0;
+      killPlayer();
+    }
+  }
+
+  function applyDamageToEnemy(e, dmg, srcX, srcY, flags={}){
+    if(e.inv > 0) return;
+
+    // Crit
+    let crit = false;
+    if(rng() < player.crit){
+      crit = true;
+      dmg *= player.critMul;
+    }
+
+    // Status procs
+    if(hasPerk("ignite")){
+      e.status.burn = Math.max(e.status.burn, 2.6);
+    }
+    if(hasPerk("poison")){
+      e.status.poison = Math.max(e.status.poison, 3.2);
+    }
+
+    // Damage
+    e.hp -= dmg;
+
+    // Pop
+    textPop(e.x, e.y - e.r - 6, crit ? `CRIT ${dmg|0}` : `${dmg|0}`, crit ? "rgba(255,90,122,.95)" : "rgba(255,255,255,.9)", crit ? 1.15 : 0.95);
+
+    // Small hitstop on big crit
+    if(crit){
+      hitstop = Math.max(hitstop, 0.018);
+      timeScale = Math.min(timeScale, 0.86);
+    }
+
+    // Hit particles
+    const ang = angleTo(srcX, srcY, e.x, e.y);
+    for(let i=0;i<10;i++){
+      const a = ang + rndRange(rng, -0.8, 0.8);
+      const sp = rndRange(rng, 60, 220);
+      particle({
+        x: e.x + Math.cos(a)*e.r*0.6,
+        y: e.y + Math.sin(a)*e.r*0.6,
+        vx: Math.cos(a)*sp,
+        vy: Math.sin(a)*sp,
+        r: rndRange(rng, 1.0, 3.0),
+        life: rndRange(rng, 0.18, 0.45),
+        color: e.boss ? "rgba(255,90,122,.55)" : "rgba(124,243,255,.45)",
+        glow: 0.8,
+        drag: 0.95,
+      });
+    }
+
+    SFX.hit();
+
+    if(e.hp <= 0){
+      killEnemy(e);
+    }
+  }
+
+  function killEnemy(e){
+    // Explosion
+    addShake(e.boss ? 14 : 8, e.boss ? 0.22 : 0.14);
+    SFX.boom();
+    decal(e.x, e.y);
+
+    // drop
+    const baseCoin = e.boss ? 38 : Math.max(1, Math.floor(1 + e.hpMax/32));
+    const greedMul = 1 + (mods.greed || 0);
+    const coinAmt = Math.round(baseCoin * greedMul);
+
+    if(rng() < e.drop){
+      spawnPickup("coin", e.x, e.y, coinAmt);
+    } else {
+      // sometimes xp
+      if(rng() < 0.35 + player.luck*0.15){
+        spawnPickup("xp", e.x, e.y, Math.round(3 + e.hpMax/40));
+      } else {
+        // sometimes heal shard
+        if(rng() < 0.10 + player.luck*0.05){
+          spawnPickup("heal", e.x, e.y, 1);
+        }
+      }
+    }
+
+    // elite extra
+    if(e.elite && rng() < 0.55){
+      spawnPickup("coin", e.x, e.y, Math.round(6*greedMul));
+      spawnPickup("xp", e.x, e.y, 7);
+    }
+
+    // Boss kill special
+    if(e.boss){
+      // wave clear & shop
+      score += 1200 + wave*90;
+      coins += 18;
+      milestones += 1;
+      waveState = "shop";
+      waveTimer = 0;
+      shopJustSpawned = true;
+      buildShopOffers();
+      openShop();
+
+      // victory after some milestones
+      if(milestones >= 2 && wave >= 10){
+        victory = true;
+        openVictory();
+      }
+    } else {
+      score += 40 + Math.floor(e.hpMax*0.5);
+    }
+
+    // remove
+    const idx = enemies.indexOf(e);
+    if(idx >= 0) enemies.splice(idx, 1);
+
+    // chain lightning perk: arc on kill chance
+    if(hasPerk("chain_lightning")){
+      if(rng() < 0.28){
+        chainLightningFrom(e.x, e.y, 2 + perks["chain_lightning"], 120 + wave*10);
+      }
+    }
+  }
+
+  function killPlayer(){
+    gameOver = true;
+    paused = true;
+
+    // Big boom
+    for(let i=0;i<70;i++){
+      particle({
+        x: player.x, y: player.y,
+        vx: rndRange(rng, -420, 420),
+        vy: rndRange(rng, -420, 420),
+        r: rndRange(rng, 1.2, 4.6),
+        life: rndRange(rng, 0.25, 1.15),
+        color: pick(rng, ["rgba(255,90,122,.55)","rgba(167,139,255,.40)","rgba(124,243,255,.45)"]),
+        glow: 1,
+        drag: 0.95,
+      });
+    }
+    SFX.boom();
+    addShake(20, 0.5);
+
+    openGameOver();
+  }
+
+  function chainLightningFrom(x, y, jumps=3, dmg=90){
+    // pick closest enemies
+    const hit = new Set();
+    let cx = x, cy = y;
+
+    for(let j=0;j<jumps;j++){
+      let best = null;
+      let bestD = Infinity;
+      for(const e of enemies){
+        if(e.boss) continue;
+        if(hit.has(e.id)) continue;
+        const d = dist2(cx, cy, e.x, e.y);
+        if(d < bestD){
+          bestD = d;
+          best = e;
+        }
+      }
+      if(!best) break;
+      hit.add(best.id);
+
+      // draw as particles (visual)
+      lightningFX(cx, cy, best.x, best.y);
+      applyDamageToEnemy(best, dmg, cx, cy, { chain:true });
+
+      cx = best.x;
+      cy = best.y;
+    }
+  }
+
+  function lightningFX(ax, ay, bx, by){
+    // generate a jagged polyline and spawn particles along it
+    const steps = 14;
+    let px = ax, py = ay;
+    for(let i=1;i<=steps;i++){
+      const t = i/steps;
+      const x = lerp(ax, bx, t) + rndRange(rng, -10, 10) * (1 - Math.abs(t-0.5)*2);
+      const y = lerp(ay, by, t) + rndRange(rng, -10, 10) * (1 - Math.abs(t-0.5)*2);
+      // spark
+      particle({
+        x, y,
+        vx: rndRange(rng, -40, 40),
+        vy: rndRange(rng, -40, 40),
+        r: rndRange(rng, 1.2, 2.6),
+        life: rndRange(rng, 0.10, 0.22),
+        color: "rgba(124,243,255,.65)",
+        glow: 1,
+        drag: 0.9,
+      });
+      px = x; py = y;
+    }
+    SFX.ui();
+  }
+
+  /* ================================================================================================
+     10) Wave logic
+     ================================================================================================ */
+
+  function resetRun(full=true){
+    // Reset everything
+    bullets.length = 0;
+    enemies.length = 0;
+    particles.length = 0;
+    pickups.length = 0;
+    hazards.length = 0;
+    textPops.length = 0;
+    decals.length = 0;
+
+    score = 0;
+    coins = 0;
+
+    wave = 1;
+    waveTimer = 0;
+    waveState = "intro";
+    shopOpen = false;
+    shopJustSpawned = false;
+
+    spawnBudget = 0;
+    spawnTicker = 0;
+
+    milestones = 0;
+
+    // Player reset
+    Object.assign(player, {
+      x: W*0.35,
+      y: H*0.5,
+      vx: 0, vy: 0,
+      hpMax: 120,
+      hp: 120,
+      shieldMax: 55,
+      shield: 28,
+      dmg: 16,
+      crit: 0.05,
+      critMul: 1.8,
+      fireRate: 9.5,
+      spread: 0.02,
+      bulletSpeed: 760,
+      bulletLife: 1.2,
+      bulletPierce: 0,
+      bulletSize: 3.1,
+      dashChargesMax: 2,
+      dashCharges: 2,
+      dashCooldown: 0,
+      dashCooldownMax: 1.2,
+      dashTime: 0,
+      dashTimeMax: 0.14,
+      invuln: 0,
+      ultCharge: 0,
+      ultReady: false,
+      ultChargeMax: 100,
+      magnet: 0,
+      luck: 0,
+      xp: 0,
+      level: 1,
+      recoil: 0,
+      inCombat: 0,
+      shieldRegen: 10,
+      shieldDelay: 1.2,
+      shieldCooldown: 0,
+      _aegisUsedThisWave: false,
+      speed: 260,
+    });
+
+    // Mods & perks
+    for(const k in perks) delete perks[k];
+    for(const k in mods) mods[k] = 0;
+
+    // Rebuild shop
+    buildShopOffers();
+
+    // Background seed stays
+    initBackground();
+
+    gameOver = false;
+    victory = false;
+
+    if(full){
+      clearModal();
+    }
+  }
+
+  function beginWave(){
+    waveState = "fight";
+    waveTimer = 0;
+    shopOpen = false;
+    shop.open = false;
+
+    player._aegisUsedThisWave = false;
+    player.inCombat = 0;
+
+    spawnBudget = diff.budgetBase + (wave-1)*diff.budgetGrowth;
+    spawnTicker = 0;
+
+    // sprinkle hazards sometimes
+    if(rng() < diff.hazardChance + wave*0.005){
+      const hx = rndRange(rng, W*0.52, W*0.92);
+      const hy = rndRange(rng, H*0.12, H*0.88);
+      spawnHazard(pick(rng, ["mine","storm"]), hx, hy);
+    }
+
+    textPop(W*0.5, 64, `WAVE ${wave}`, "rgba(255,255,255,.92)", 1.2);
+  }
+
+  function endWave(){
+    waveState = "shop";
+    waveTimer = 0;
+    shopJustSpawned = true;
+    buildShopOffers();
+
+    // reward
+    const reward = 6 + Math.floor(wave*0.6);
+    coins += reward;
+    textPop(W*0.5, 84, `+${reward} coins`, "rgba(124,243,255,.95)", 1.1);
+
+    // auto open shop sometimes
+    if(wave % 2 === 0){
+      openShop();
+    }
+  }
+
+  function waveUpdate(dt){
+    waveTimer += dt;
+
+    if(waveState === "intro"){
+      // short intro before fight
+      if(waveTimer > 1.1){
+        beginWave();
+      }
+    }
+    else if(waveState === "fight"){
+      // spawn enemies using budget
+      spawnTicker -= dt;
+      if(spawnBudget > 0 && spawnTicker <= 0){
+        spawnTicker = rndRange(rng, 0.25, 0.65) * (1 / (1 + wave*0.03));
+        // choose type by wave
+        const choices = ENEMY_TYPES.filter(t => {
+          if(wave < 2) return t.cost <= 2;
+          if(wave < 4) return t.cost <= 3;
+          if(wave < 7) return t.cost <= 4;
+          return true;
+        });
+        const type = pick(rng, choices);
+
+        // elite chance
+        const eliteChance = diff.eliteChance + wave*0.004 + (mods.extraElite || 0);
+        const elite = rng() < eliteChance;
+
+        const x = rndRange(rng, W*0.72, W*0.98);
+        const y = rndRange(rng, 40, H-40);
+        spawnEnemy(type.id, x, y, elite);
+
+        spawnBudget -= type.cost * (elite ? 1.4 : 1.0);
+      }
+
+      // if all budget spent and no enemies remain => wave end
+      if(spawnBudget <= 0 && enemies.length === 0){
+        // boss?
+        if(wave % diff.bossEvery === 0){
+          waveState = "boss";
+          waveTimer = 0;
+          spawnBoss();
+        } else {
+          endWave();
+        }
+      }
+    }
+    else if(waveState === "boss"){
+      // wait until boss is dead
+      const hasBoss = enemies.some(e => e.boss);
+      if(!hasBoss && enemies.length === 0){
+        // after boss, wave increments
+        wave += 1;
+        waveState = "intro";
+        waveTimer = 0;
+      }
+    }
+    else if(waveState === "shop"){
+      // when shop closes, start next wave
+      if(!shopOpen && !paused){
+        wave += 1;
+        waveState = "intro";
+        waveTimer = 0;
+      }
+    }
+  }
+
+  /* ================================================================================================
+     11) Player update
+     ================================================================================================ */
+
+  function playerUpdate(dt){
+    // movement input
+    let ix = 0, iy = 0;
+    if(keys["KeyW"]) iy -= 1;
+    if(keys["KeyS"]) iy += 1;
+    if(keys["KeyA"]) ix -= 1;
+    if(keys["KeyD"]) ix += 1;
+    const len = Math.hypot(ix, iy);
+    if(len > 0){
+      ix /= len; iy /= len;
+    }
+
+    // dash
+    if(player.dashCooldown > 0) player.dashCooldown -= dt;
+    if(player.invuln > 0) player.invuln -= dt;
+    if(player.dashTime > 0){
+      player.dashTime -= dt;
+      // during dash, velocity continues
+      if(player.dashTime <= 0){
+        // end dash
+      }
+    } else {
+      // normal acceleration
+      const tx = ix * player.speed;
+      const ty = iy * player.speed;
+      player.vx = lerp(player.vx, tx, 1 - Math.pow(1 - 0.18, dt*60));
+      player.vy = lerp(player.vy, ty, 1 - Math.pow(1 - 0.18, dt*60));
+      player.vx *= Math.pow(player.drag, dt*60);
+      player.vy *= Math.pow(player.drag, dt*60);
+    }
+
+    // integrate
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    // clamp arena
+    player.x = clamp(player.x, 20, W-20);
+    player.y = clamp(player.y, 20, H-20);
+
+    // recoil relax
+    player.recoil *= Math.pow(0.82, dt*60);
+
+    // shield regen (out of combat)
+    if(player.inCombat > 0) player.inCombat -= dt;
+
+    if(player.shieldCooldown > 0) player.shieldCooldown -= dt;
+    const canRegen = player.inCombat <= 0 && player.shieldCooldown <= 0;
+    if(canRegen && player.shield < player.shieldMax){
+      player.shield += player.shieldRegen * dt;
+      if(player.shield > player.shieldMax) player.shield = player.shieldMax;
+    }
+
+    // HP regen perk
+    if(hasPerk("hp_regen") && player.inCombat <= 0 && player.hp < player.hpMax){
+      const amt = (1.0 + 0.4*(perks["hp_regen"]-1)) * dt;
+      player.hp = Math.min(player.hpMax, player.hp + amt);
+    }
+
+    // ultimate ready
+    player.ultReady = player.ultCharge >= player.ultChargeMax;
+
+    // shooting
+    player.lastShot -= dt;
+    if(mouse.down && player.lastShot <= 0 && !paused){
+      const shotsPerSec = player.fireRate;
+      const interval = 1 / shotsPerSec;
+      player.lastShot = interval;
+
+      const baseAng = angleTo(player.x, player.y, pointer.x, pointer.y);
+      const spread = player.spread;
+
+      // patterns
+      if(hasPerk("penta_shot")){
+        const n = 5;
+        for(let i=0;i<n;i++){
+          const off = (i - (n-1)/2) * 0.10;
+          fireBullet(player.x, player.y, baseAng + off + rndRange(rng, -spread, spread), 0.72);
+        }
+      }
+      else if(hasPerk("triple_shot")){
+        const n = 3;
+        for(let i=0;i<n;i++){
+          const off = (i - (n-1)/2) * 0.08;
+          fireBullet(player.x, player.y, baseAng + off + rndRange(rng, -spread, spread), 0.85);
+        }
+      }
+      else{
+        fireBullet(player.x, player.y, baseAng + rndRange(rng, -spread, spread), 1.0);
+      }
+    }
+
+    // drones
+    if(hasPerk("drone")){
+      droneUpdate(dt);
+    }
+
+    // orbs
+    if(hasPerk("orbs")){
+      orbsUpdate(dt);
+    }
+
+    // turret
+    if(hasPerk("turret")){
+      turretUpdate(dt);
+    }
+
+    // pickup magnet
+    if(player.magnet > 0){
+      const rad = 120 + player.magnet;
+      const rad2 = rad*rad;
+      for(const p of pickups){
+        const d2 = dist2(player.x, player.y, p.x, p.y);
+        if(d2 < rad2){
+          const d = Math.sqrt(d2) + 0.001;
+          const pull = (1 - d/rad) * 640;
+          p.vx += (player.x - p.x)/d * pull * dt;
+          p.vy += (player.y - p.y)/d * pull * dt;
+        }
+      }
+    }
+  }
+
+  // Dash trigger
+  function tryDash(){
+    if(paused) return;
+    if(player.dashCharges <= 0) return;
+    if(player.dashCooldown > 0) return;
+
+    // direction: toward movement input, else toward mouse
+    let dx = 0, dy = 0;
+    if(keys["KeyW"]) dy -= 1;
+    if(keys["KeyS"]) dy += 1;
+    if(keys["KeyA"]) dx -= 1;
+    if(keys["KeyD"]) dx += 1;
+    const len = Math.hypot(dx, dy);
+    if(len > 0){ dx/=len; dy/=len; }
+    else{
+      const ang = angleTo(player.x, player.y, pointer.x, pointer.y);
+      dx = Math.cos(ang); dy = Math.sin(ang);
+    }
+
+    player.dashCharges -= 1;
+    player.dashCooldown = player.dashCooldownMax;
+    player.dashTime = player.dashTimeMax;
+    player.invuln = Math.max(player.invuln, player.dashTimeMax + 0.02);
+
+    player.vx = dx * player.dashSpeed;
+    player.vy = dy * player.dashSpeed;
+
+    // dash particles trail
+    for(let i=0;i<36;i++){
+      particle({
+        x: player.x - dx*rndRange(rng, 0, 24),
+        y: player.y - dy*rndRange(rng, 0, 24),
+        vx: -dx*rndRange(rng, 40, 240) + rndRange(rng, -60, 60),
+        vy: -dy*rndRange(rng, 40, 240) + rndRange(rng, -60, 60),
+        r: rndRange(rng, 1.0, 3.0),
+        life: rndRange(rng, 0.18, 0.42),
+        color: "rgba(167,139,255,.55)",
+        glow: 1,
+        drag: 0.93,
+      });
+    }
+
+    addShake(6, 0.12);
+    SFX.dash();
+  }
+
+  /* ================================================================================================
+     12) Drones / Orbs / Turrets (perks)
+     ================================================================================================ */
+
+  const drone = {
+    t: 0,
+    cd: 0,
+    x: player.x,
+    y: player.y,
+    ang: 0,
+  };
+
+  function droneUpdate(dt){
+    drone.t += dt;
+    // orbit around player
+    const orbitR = 42;
+    drone.ang += dt*2.6;
+    drone.x = player.x + Math.cos(drone.ang)*orbitR;
+    drone.y = player.y + Math.sin(drone.ang)*orbitR;
+
+    // shoot at nearest enemy
+    drone.cd -= dt;
+    if(drone.cd <= 0 && enemies.length > 0 && !paused){
+      let best = null;
+      let bestD = Infinity;
+      for(const e of enemies){
+        const d2 = dist2(drone.x, drone.y, e.x, e.y);
+        if(d2 < bestD){
+          bestD = d2;
+          best = e;
+        }
+      }
+      if(best){
+        drone.cd = 0.42;
+        const ang = angleTo(drone.x, drone.y, best.x, best.y);
+        // small bullet
+        bullets.push({
+          x: drone.x, y: drone.y,
+          vx: Math.cos(ang)*(player.bulletSpeed*0.85),
+          vy: Math.sin(ang)*(player.bulletSpeed*0.85),
+          r: player.bulletSize*0.9,
+          t: 0,
+          life: 0.9,
+          dmg: player.dmg*0.55,
+          pierce: 0,
+          color: "rgba(167,139,255,.85)",
+          from: "player",
+          drone: true,
+        });
+        for(let i=0;i<5;i++){
+          particle({
+            x: drone.x, y: drone.y,
+            vx: rndRange(rng, -80, 80),
+            vy: rndRange(rng, -80, 80),
+            r: rndRange(rng, 1.0, 2.2),
+            life: rndRange(rng, 0.12, 0.20),
+            color: "rgba(167,139,255,.55)",
+            glow: 1,
+          });
+        }
+        playTone(990, 0.04, "triangle", 0.18, 80);
+      }
+    }
+  }
+
+  const orbs = {
+    t: 0,
+  };
+
+  function orbsUpdate(dt){
+    orbs.t += dt;
+    const count = 2 + Math.min(2, perks["orbs"]-1);
+    const baseR = 62;
+
+    // damage enemies that touch orbiting orbs
+    for(let i=0;i<count;i++){
+      const a = orbs.t*2.2 + i*(TAU/count);
+      const ox = player.x + Math.cos(a)*baseR;
+      const oy = player.y + Math.sin(a)*baseR;
+
+      // small trail
+      if(rng() < 0.35){
+        particle({
+          x: ox, y: oy,
+          vx: rndRange(rng, -30, 30),
+          vy: rndRange(rng, -30, 30),
+          r: rndRange(rng, 0.8, 1.8),
+          life: rndRange(rng, 0.08, 0.14),
+          color: "rgba(124,243,255,.55)",
+          glow: 1,
+        });
+      }
+
+      for(const e of enemies){
+        const d2 = dist2(ox, oy, e.x, e.y);
+        const rr = (e.r + 8);
+        if(d2 < rr*rr){
+          // apply gentle continuous damage
+          applyDamageToEnemy(e, (player.dmg*0.35)*dt*6, ox, oy, { orb:true });
+          e.inv = 0.04; // avoid insane stacks
+        }
+      }
+    }
+  }
+
+  const turret = {
+    t: 0,
+    cd: 0,
+    active: false,
+    x: 0, y: 0,
+    life: 0,
+    shootCD: 0,
+  };
+
+  function turretUpdate(dt){
+    turret.t += dt;
+    turret.cd -= dt;
+
+    if(!turret.active && turret.cd <= 0 && !paused){
+      turret.active = true;
+      turret.life = 8.5 + perks["turret"]*1.2;
+      turret.x = player.x + rndRange(rng, -120, 120);
+      turret.y = player.y + rndRange(rng, -120, 120);
+      turret.shootCD = 0.1;
+      turret.cd = 12.0;
+      textPop(turret.x, turret.y-26, "TURRET", "rgba(124,243,255,.95)");
+      SFX.ui();
+    }
+
+    if(turret.active){
+      turret.life -= dt;
+      turret.shootCD -= dt;
+
+      // clamp
+      turret.x = clamp(turret.x, 24, W-24);
+      turret.y = clamp(turret.y, 24, H-24);
+
+      // shoot nearest
+      if(turret.shootCD <= 0 && enemies.length > 0 && !paused){
+        let best = null;
+        let bestD = Infinity;
+        for(const e of enemies){
+          const d2 = dist2(turret.x, turret.y, e.x, e.y);
+          if(d2 < bestD){
+            bestD = d2;
+            best = e;
+          }
+        }
+        if(best){
+          turret.shootCD = 0.12;
+          const ang = angleTo(turret.x, turret.y, best.x, best.y);
+          bullets.push({
+            x: turret.x, y: turret.y,
+            vx: Math.cos(ang)*(player.bulletSpeed*0.78),
+            vy: Math.sin(ang)*(player.bulletSpeed*0.78),
+            r: 2.8,
+            t: 0,
+            life: 0.75,
+            dmg: player.dmg*0.35,
+            pierce: 0,
+            color: "rgba(124,243,255,.8)",
+            from: "player",
+            turret: true,
+          });
+          playTone(840, 0.03, "square", 0.10, 0);
+        }
+      }
+
+      // turret aura fx
+      if(rng() < 0.25){
+        particle({
+          x: turret.x, y: turret.y,
+          vx: rndRange(rng, -25, 25),
+          vy: rndRange(rng, -25, 25),
+          r: rndRange(rng, 0.8, 1.6),
+          life: rndRange(rng, 0.10, 0.18),
+          color: "rgba(167,139,255,.35)",
+          glow: 0.6,
+        });
+      }
+
+      if(turret.life <= 0){
+        turret.active = false;
+        for(let i=0;i<14;i++){
+          particle({
+            x: turret.x, y: turret.y,
+            vx: rndRange(rng, -120, 120),
+            vy: rndRange(rng, -120, 120),
+            r: rndRange(rng, 1.0, 2.6),
+            life: rndRange(rng, 0.18, 0.42),
+            color: "rgba(167,139,255,.45)",
+            glow: 1,
+          });
+        }
+      }
+    }
+  }
+
+  /* ================================================================================================
+     13) Enemy update (AI behaviors + boss patterns)
+     ================================================================================================ */
+
+  function enemyUpdate(dt){
+    for(const e of enemies){
+      e.t += dt;
+      if(e.inv > 0) e.inv -= dt;
+
+      // Status ticks
+      if(e.status){
+        if(e.status.burn > 0){
+          e.status.burn -= dt;
+          const burnDmg = (2.4 + wave*0.15) * dt;
+          e.hp -= burnDmg;
+          if(rng() < 0.2){
+            particle({ x:e.x, y:e.y, vx:rndRange(rng,-25,25), vy:rndRange(rng,-25,25), r:rndRange(rng,1,2), life:rndRange(rng,0.12,0.22), color:"rgba(255,90,122,.45)", glow:0.8 });
+          }
+        }
+        if(e.status.poison > 0){
+          e.status.poison -= dt;
+          const pDmg = (1.6 + wave*0.12) * dt;
+          e.hp -= pDmg;
+          if(rng() < 0.18){
+            particle({ x:e.x, y:e.y, vx:rndRange(rng,-20,20), vy:rndRange(rng,-20,20), r:rndRange(rng,1,2), life:rndRange(rng,0.12,0.22), color:"rgba(78,255,180,.38)", glow:0.6 });
+          }
+        }
+        if(e.status.slow > 0){
+          e.status.slow -= dt;
+        }
+      }
+
+      // Die from DOT
+      if(e.hp <= 0){
+        killEnemy(e);
+        continue;
+      }
+
+      // Boss
+      if(e.boss){
+        bossBehavior(e, dt);
+        continue;
+      }
+
+      // Common AI
+      const toPlayerAng = angleTo(e.x, e.y, player.x, player.y);
+      const d = dist(e.x, e.y, player.x, player.y);
+
+      // Behavior modifications
+      let desired = { x:0, y:0 };
+
+      if(e.behavior === "chase"){
+        desired.x = Math.cos(toPlayerAng);
+        desired.y = Math.sin(toPlayerAng);
+      }
+      else if(e.behavior === "kite"){
+        // keep mid distance, shoot occasionally
+        const target = 240;
+        if(d < target){
+          desired.x = -Math.cos(toPlayerAng);
+          desired.y = -Math.sin(toPlayerAng);
+        } else if(d > target + 80){
+          desired.x = Math.cos(toPlayerAng);
+          desired.y = Math.sin(toPlayerAng);
+        } else {
+          // strafe
+          desired.x = Math.cos(toPlayerAng + Math.PI/2);
+          desired.y = Math.sin(toPlayerAng + Math.PI/2);
+        }
+
+        e.cd -= dt;
+        if(e.cd <= 0 && d < 520 && !paused){
+          e.cd = rndRange(rng, 0.9, 1.4);
+          enemyShoot(e, toPlayerAng, 520, 3.8, 2.0, e.dmg, "rgba(255,255,255,.78)");
+        }
+      }
+      else if(e.behavior === "spit"){
+        // keep distance and spit arcs
+        const target = 320;
+        if(d < target){
+          desired.x = -Math.cos(toPlayerAng);
+          desired.y = -Math.sin(toPlayerAng);
+        } else {
+          desired.x = Math.cos(toPlayerAng);
+          desired.y = Math.sin(toPlayerAng);
+        }
+
+        e.cd -= dt;
+        if(e.cd <= 0 && d < 620 && !paused){
+          e.cd = rndRange(rng, 1.1, 1.6);
+          const n = 3 + Math.floor(wave/6);
+          for(let i=0;i<n;i++){
+            const off = (i - (n-1)/2) * 0.10;
+            enemyShoot(e, toPlayerAng + off, 420, 4.2, 2.2, e.dmg*0.75, "rgba(255,90,122,.72)");
+          }
+        }
+      }
+      else if(e.behavior === "orbit"){
+        // orbit around player
+        e.orbitA += dt * (0.9 + wave*0.02);
+        const ox = player.x + Math.cos(e.orbitA) * e.orbitR;
+        const oy = player.y + Math.sin(e.orbitA) * e.orbitR;
+        const ang = angleTo(e.x, e.y, ox, oy);
+        desired.x = Math.cos(ang);
+        desired.y = Math.sin(ang);
+
+        e.cd -= dt;
+        if(e.cd <= 0 && d < 600 && !paused){
+          e.cd = rndRange(rng, 0.85, 1.2);
+          enemyShoot(e, toPlayerAng, 520, 3.5, 2.0, e.dmg*0.9, "rgba(124,243,255,.40)");
+        }
+      }
+      else if(e.behavior === "leech"){
+        // quick lunge and lifesteal
+        if(d > 140){
+          desired.x = Math.cos(toPlayerAng);
+          desired.y = Math.sin(toPlayerAng);
+        } else {
+          desired.x = Math.cos(toPlayerAng);
+          desired.y = Math.sin(toPlayerAng);
+          // bite timer
+          e.leechT += dt;
+          if(e.leechT > 0.8){
+            e.leechT = 0;
+            // projectile bite
+            enemyShoot(e, toPlayerAng, 580, 4.6, 1.6, e.dmg*0.9, "rgba(78,255,180,.55)");
+          }
+        }
+      }
+
+      // slow effect
+      const slowMul = e.status && e.status.slow > 0 ? 0.6 : 1.0;
+
+      // integrate
+      const sp = e.speed * slowMul;
+      e.vx = lerp(e.vx, desired.x * sp, 1 - Math.pow(1 - 0.12, dt*60));
+      e.vy = lerp(e.vy, desired.y * sp, 1 - Math.pow(1 - 0.12, dt*60));
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+
+      // clamp arena
+      e.x = clamp(e.x, 24, W-24);
+      e.y = clamp(e.y, 24, H-24);
+
+      // collision with player (contact)
+      const rr = e.r + player.r;
+      if(dist2(e.x, e.y, player.x, player.y) < rr*rr){
+        applyDamageToPlayer(e.dmg * dt * 3.2, e.x, e.y);
+
+        // thorns perk
+        if(hasPerk("thorns")){
+          applyDamageToEnemy(e, (player.dmg*0.45)*dt*5.5, player.x, player.y, { thorns:true });
+        }
+
+        // small pushback
+        const ang = angleTo(e.x, e.y, player.x, player.y);
+        e.x -= Math.cos(ang) * 90 * dt;
+        e.y -= Math.sin(ang) * 90 * dt;
+      }
+    }
+  }
+
+  // Boss behavior patterns
+  function bossBehavior(b, dt){
+    b.t += dt;
+    b.cd -= dt;
+    if(b.inv > 0) b.inv -= dt;
+
+    // intro
+    if(b.mode === "intro"){
+      b.introT -= dt;
+      // drift in
+      b.vx = lerp(b.vx, -80, 1 - Math.pow(1 - 0.08, dt*60));
+      b.vy = lerp(b.vy, Math.sin(b.t)*30, 1 - Math.pow(1 - 0.08, dt*60));
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.x = clamp(b.x, W*0.55, W-60);
+      b.y = clamp(b.y, 60, H-60);
+
+      // aura
+      b.aura = lerp(b.aura, 1, 1 - Math.pow(1 - 0.08, dt*60));
+
+      if(b.introT <= 0){
+        b.mode = "active";
+        b.cd = 0.2;
+      }
+      return;
+    }
+
+    // Determine phase by hp
+    const hpPct = b.hp / b.hpMax;
+    let phaseIdx = 0;
+    for(let i=0;i<b.phases.length;i++){
+      if(hpPct < b.phases[i].at) phaseIdx = i+1;
+    }
+    b.phase = clamp(phaseIdx, 0, b.phases.length);
+
+    const mode = b.phases[Math.min(b.phase, b.phases.length-1)]?.mode || "dash_slash";
+    const rate = b.phases[Math.min(b.phase, b.phases.length-1)]?.rate || 1.0;
+
+    // Boss movement: hover toward player but keep distance
+    const ang = angleTo(b.x, b.y, player.x, player.y);
+    const d = dist(b.x, b.y, player.x, player.y);
+
+    let desiredX = 0, desiredY = 0;
+    const targetDist = 320;
+    if(d > targetDist + 60){
+      desiredX = Math.cos(ang);
+      desiredY = Math.sin(ang);
+    } else if(d < targetDist - 40){
+      desiredX = -Math.cos(ang);
+      desiredY = -Math.sin(ang);
+    } else {
+      desiredX = Math.cos(ang + Math.PI/2);
+      desiredY = Math.sin(ang + Math.PI/2);
+    }
+
+    const sp = b.speed * (0.9 + 0.08*b.phase);
+    b.vx = lerp(b.vx, desiredX * sp, 1 - Math.pow(1 - 0.08, dt*60));
+    b.vy = lerp(b.vy, desiredY * sp, 1 - Math.pow(1 - 0.08, dt*60));
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    b.x = clamp(b.x, W*0.45, W-60);
+    b.y = clamp(b.y, 60, H-60);
+
+    // Attacks
+    if(b.cd <= 0 && !paused){
+      b.cd = (1.1 / rate) + rndRange(rng, 0.0, 0.35);
+
+      if(mode === "dash_slash"){
+        // sudden dash to player then shockwave
+        const dashAng = angleTo(b.x, b.y, player.x, player.y);
+        const dx = Math.cos(dashAng), dy = Math.sin(dashAng);
+        // pseudo dash: teleport-ish step with trail
+        const steps = 10;
+        for(let i=0;i<steps;i++){
+          const t = i/steps;
+          particle({
+            x: b.x + dx*t*120,
+            y: b.y + dy*t*120,
+            vx: rndRange(rng, -80, 80),
+            vy: rndRange(rng, -80, 80),
+            r: rndRange(rng, 1.2, 3.0),
+            life: rndRange(rng, 0.14, 0.28),
+            color: "rgba(255,90,122,.45)",
+            glow: 1,
+          });
+        }
+        b.x += dx*140;
+        b.y += dy*140;
+        addShake(10, 0.16);
+        playTone(140, 0.12, "sawtooth", 0.28, -100);
+
+        // shockwave bullets
+        const n = 16 + b.phase*4;
+        for(let i=0;i<n;i++){
+          const a = i*(TAU/n) + rng()*0.04;
+          enemyShoot(b, a, 360 + b.phase*20, 4.2, 2.4, b.dmg*0.6, "rgba(255,90,122,.68)");
+        }
+      }
+      else if(mode === "bullet_spiral"){
+        // spiral pattern
+        const n = 24;
+        for(let i=0;i<n;i++){
+          const a = b.t*2.2 + i*(TAU/n);
+          enemyShoot(b, a, 320 + b.phase*25, 3.8, 2.6, b.dmg*0.55, "rgba(167,139,255,.55)");
+        }
+        playTone(180, 0.10, "triangle", 0.20, -200);
+      }
+      else if(mode === "meteor_rain"){
+        // spawn mines/storm spots
+        const count = 2 + b.phase;
+        for(let i=0;i<count;i++){
+          const hx = rndRange(rng, W*0.30, W*

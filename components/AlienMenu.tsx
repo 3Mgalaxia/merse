@@ -289,8 +289,18 @@ export default function AlienMenu() {
                 })}
               </nav>
 
-              <footer className="rounded-xl border border-white/5 bg-black/30 px-4 py-3 text-[11px] uppercase tracking-[0.25em] text-purple-200/70">
-                Sempre em expansão
+              <footer className="rounded-xl border border-white/5 bg-black/30 px-4 py-3 text-[11px] uppercase tracking-[0.25em] text-purple-200/80 shadow-[0_0_24px_rgba(168,85,247,0.42)] animate-pulse">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(new CustomEvent("mersePortalsCard", { detail: true }));
+                    }
+                  }}
+                  className="w-full text-left transition hover:text-white"
+                >
+                  Sempre em expansão
+                </button>
               </footer>
             </div>
           </motion.div>

@@ -43,7 +43,7 @@ const ASPECT_CLASS_MAP: Record<string, string> = {
   "3:2": "aspect-[3/2]",
 };
 
-type ProviderKey = "veo" | "sora" | "merse";
+type ProviderKey = "veo" | "sora" | "merse" | "wan" | "kling";
 
 type ProviderConfig = {
   id: ProviderKey;
@@ -79,6 +79,22 @@ const PROVIDERS: ProviderConfig[] = [
     accent: "from-indigo-500/15 via-purple-500/10 to-pink-500/20",
     icon: "planet",
   },
+  {
+    id: "wan",
+    label: "Wan-2.6-t2v",
+    description: "wan-video/wan-2.6-t2v para geração rápida com estética consistente.",
+    cost: 20,
+    accent: "from-emerald-500/15 via-teal-500/12 to-blue-500/18",
+    icon: "robot",
+  },
+  {
+    id: "kling",
+    label: "Kling v2.5 Turbo",
+    description: "kwaivgi/kling-v2.5-turbo-pro para sequências fluidas e detalhadas.",
+    cost: 22,
+    accent: "from-amber-500/15 via-orange-500/12 to-red-500/18",
+    icon: "robot",
+  },
 ];
 
 const PROVIDER_MAP = PROVIDERS.reduce<Record<ProviderKey, ProviderConfig>>((acc, provider) => {
@@ -90,6 +106,8 @@ const PROVIDER_ASPECTS: Record<ProviderKey, AspectPreset["id"][]> = {
   veo: ["16:9", "9:16"],
   sora: ["16:9", "9:16"],
   merse: ["16:9", "9:16"],
+  wan: ["16:9", "9:16"],
+  kling: ["16:9", "9:16"],
 };
 
 const PROVIDER_DURATION: Record<
@@ -99,6 +117,8 @@ const PROVIDER_DURATION: Record<
   veo: { min: 4, max: 8, step: 2, default: 6, labels: ["Take curto", "Vinheta longa"] },
   sora: { min: 6, max: 18, step: 2, default: 12, labels: ["Storyboard", "Sequência narrativa"] },
   merse: { min: 4, max: 20, step: 2, default: 12, labels: ["Clipes curtos", "Sequências longas"] },
+  wan: { min: 4, max: 16, step: 2, default: 10, labels: ["Rápido", "Estendido"] },
+  kling: { min: 4, max: 16, step: 2, default: 10, labels: ["Rápido", "Estendido"] },
 };
 
 type GeneratedVideo = {

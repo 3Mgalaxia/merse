@@ -453,6 +453,64 @@
   color: var(--codex-muted);
 }
 
+.codex-metrics--with-button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.codex-metrics__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.codex-preview-button {
+  border: 1px solid var(--codex-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--codex-white);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-weight: 600;
+  font-size: 0.72rem;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.codex-preview-button:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.codex-preview-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codex-clear-button {
+  border: 1px solid rgba(255, 90, 122, 0.45);
+  background: rgba(255, 90, 122, 0.08);
+  color: var(--codex-white);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-weight: 600;
+  font-size: 0.72rem;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.codex-clear-button:hover {
+  border-color: rgba(255, 90, 122, 0.8);
+  background: rgba(255, 90, 122, 0.18);
+}
+
+.codex-clear-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .codex-editor {
   width: 100%;
   min-height: 460px;

@@ -104,9 +104,10 @@ export default function VideoRoupas() {
     }
   };
 
-const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      setError("Descreva o look que deseja animar.");
+  const handleGenerate = async () => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt && !referencePayload) {
+      setError("Descreva o look ou envie uma referência para animar.");
       return;
     }
 
@@ -134,11 +135,13 @@ const handleGenerate = async () => {
     setRenderResult(null);
 
     try {
+      const effectivePrompt =
+        trimmedPrompt || "Look fashion baseado na referência enviada, pronto para passarela digital.";
       const response = await fetch("/api/generate-fashion-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
+          prompt: effectivePrompt,
           modelPreset: modelPreset.id,
           cameraAngle,
           fabric,

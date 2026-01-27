@@ -8,6 +8,8 @@ type SuccessResponse = {
   output?: unknown;
   metrics?: unknown;
   logs?: string;
+  projectZip?: string;
+  files?: Record<string, string>;
 };
 
 type ErrorResponse = { error: string };
@@ -81,6 +83,31 @@ async function pollPrediction(token: string, predictionId: string) {
   return statusPayload;
 }
 
+function shouldUseAISiteAPI(prompt: string): boolean {
+  const keywords = [
+    "inteligência artificial",
+    "ia",
+    "ai",
+    "artificial intelligence",
+    "machine learning",
+    "deep learning",
+    "neural network",
+  ];
+  const lower = prompt.toLowerCase();
+  return keywords.some((word) => lower.includes(word));
+}
+
+function extractProjectData(output: unknown) {
+  const base =
+    output && typeof output === "object" && !Array.isArray(output) ? (output as Record<string, unknown>) : null;
+  const projectZip = typeof base?.projectZip === "string" ? base.projectZip : undefined;
+  const files =
+    base?.files && typeof base.files === "object" && !Array.isArray(base.files)
+      ? (base.files as Record<string, string>)
+      : undefined;
+  return { projectZip, files };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>,
@@ -90,21 +117,34 @@ export default async function handler(
     return res.status(405).json({ error: "Método não suportado." });
   }
 
-  const { prompt, extras } = req.body ?? {};
+  const { prompt, extras, projectName, modules } = req.body ?? {};
 
   if (typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "Forneça um prompt válido para gerar o site." });
   }
 
-  const modelSlug = process.env.REPLICATE_MERSE_MODEL || "3mgalaxia/merse-gerador-de-site";
-  const versionId =
+  const useAiFlow = shouldUseAISiteAPI(prompt);
+
+  const aiModelSlug = process.env.REPLICATE_MERSE_MODEL || "3mgalaxia/merse-gerador-de-site";
+  const aiVersionId =
     typeof process.env.REPLICATE_MERSE_MODEL_VERSION === "string"
       ? process.env.REPLICATE_MERSE_MODEL_VERSION
       : undefined;
-  const token =
+  const aiToken =
     process.env.REPLICATE_MERSE_SITE_TOKEN ??
     process.env.REPLICATE_MERSE_API_TOKEN ??
     process.env.REPLICATE_API_TOKEN;
+
+  const fallbackModelSlug = process.env.REPLICATE_DEFAULT_SITE_MODEL || aiModelSlug;
+  const fallbackVersionId =
+    typeof process.env.REPLICATE_DEFAULT_SITE_MODEL_VERSION === "string"
+      ? process.env.REPLICATE_DEFAULT_SITE_MODEL_VERSION
+      : aiVersionId;
+  const fallbackToken = process.env.REPLICATE_DEFAULT_SITE_TOKEN ?? aiToken;
+
+  const modelSlug = useAiFlow ? aiModelSlug : fallbackModelSlug;
+  const versionId = useAiFlow ? aiVersionId : fallbackVersionId;
+  const token = useAiFlow ? aiToken : fallbackToken;
 
   if (!token) {
     return res
@@ -113,7 +153,26 @@ export default async function handler(
   }
 
   try {
+    const normalizedModules =
+      Array.isArray(modules) && modules.length
+        ? modules.map((item) => (typeof item === "string" ? item.trim() : item)).filter(Boolean)
+        : undefined;
+
+    const mergedExtras = {
+      ...(extras && typeof extras === "object" && !Array.isArray(extras) ? extras : {}),
+      ...(projectName ? { projectName } : {}),
+      ...(normalizedModules ? { modules: normalizedModules } : {}),
+    };
+
     const version = await resolveVersion(token, modelSlug, versionId);
+    const replicatePayload = {
+      version,
+      input: {
+        prompt: prompt.trim(),
+        ...(Object.keys(mergedExtras).length ? { extras: JSON.stringify(mergedExtras) } : {}),
+      },
+    };
+
     const creation = await fetchJson(`${REPLICATE_BASE}/predictions`, {
       method: "POST",
       headers: {
@@ -121,16 +180,11 @@ export default async function handler(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        version,
-        input: {
-          prompt: prompt.trim(),
-          ...(extras && typeof extras === "object" ? extras : {}),
-        },
-      }),
+      body: JSON.stringify(replicatePayload),
     });
 
     const prediction = await pollPrediction(token, creation?.id as string);
+    const { projectZip, files } = extractProjectData(prediction.output);
 
     return res.status(200).json({
       id: prediction.id,
@@ -138,6 +192,8 @@ export default async function handler(
       output: prediction.output,
       metrics: prediction.metrics,
       logs: prediction.logs,
+      projectZip,
+      files,
     });
   } catch (error) {
     console.error("Erro ao gerar site:", error);

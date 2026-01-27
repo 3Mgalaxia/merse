@@ -2336,6 +2336,7 @@ function CodexStudioContent() {
   const { remaining, planName } = useEnergy();
 
   const [html, setHtml] = useState<string>(DEFAULT_HTML);
+  const [previewHtml, setPreviewHtml] = useState<string>(DEFAULT_HTML);
   const [comando, setComando] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<StatusState>(null);
@@ -2378,6 +2379,7 @@ function CodexStudioContent() {
       const data = await callCodexEdit({ html, comando: trimmedCommand });
       const updatedHtml = data.htmlAtualizado ?? data.html ?? html;
       setHtml(updatedHtml);
+      setPreviewHtml(updatedHtml);
       setHistory((prev) => [{ command: trimmedCommand, executedAt: new Date().toISOString() }, ...prev].slice(0, 8));
       const successLabel = creditsLabel;
       setStatus({ message: `Blueprint atualizado • ⚡ ${successLabel} créditos`, tone: "success" });
@@ -2438,6 +2440,11 @@ function CodexStudioContent() {
     URL.revokeObjectURL(url);
   }, [html]);
 
+  const handleClearHtml = useCallback(() => {
+    setHtml("");
+    setPreviewHtml("");
+    setStatus({ message: "Editor limpo. Cole um novo HTML para continuar.", tone: "info" });
+  }, [setHtml, setPreviewHtml, setStatus]);
   const handleOpenDocs = useCallback(() => {
     window.open("https://merse.ai", "_blank", "noreferrer");
   }, []);
@@ -2594,8 +2601,15 @@ function CodexStudioContent() {
                 history={history.map((entry) => entry.command)}
                 presets={presets}
               />
-              <CodexEditor html={html} setHtml={setHtml} loading={loading} />
-              <CodexPreview html={html} viewMode={viewMode} setViewMode={setViewMode} />
+              <CodexEditor
+                html={html}
+                setHtml={setHtml}
+                loading={loading}
+                onPreview={() => setPreviewHtml(html)}
+                isPreviewDirty={html !== previewHtml}
+                onClear={handleClearHtml}
+              />
+              <CodexPreview html={previewHtml} viewMode={viewMode} setViewMode={setViewMode} />
             </div>
 
             <section className="codex-footer-grid">

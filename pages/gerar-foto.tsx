@@ -22,7 +22,7 @@ import MerseLoadingOverlay from "@/components/MerseLoadingOverlay";
 import { useAuth } from "@/contexts/AuthContext";
 import { appendUserCreations, generateCreationId, getUserStorageKey } from "@/lib/creations";
 
-type ProviderKey = "openai" | "flux" | "merse";
+type ProviderKey = "openai" | "flux" | "merse" | "nano-banana" | "runway-gen4";
 
 type ProviderConfig = {
   id: ProviderKey;
@@ -58,6 +58,22 @@ const PROVIDERS: ProviderConfig[] = [
     accent: "from-indigo-500/15 via-purple-500/10 to-pink-500/15",
     icon: "merse",
   },
+  {
+    id: "nano-banana",
+    label: "Nano Banana",
+    description: "Modelo ultra leve para rascunhos relâmpago e variações baratas.",
+    cost: 8,
+    accent: "from-amber-500/20 via-yellow-500/10 to-orange-500/15",
+    icon: "openai",
+  },
+  {
+    id: "runway-gen4",
+    label: "Runway Gen-4",
+    description: "runwayml/gen4-image para movimentos de moda e campanhas rápidas.",
+    cost: 18,
+    accent: "from-emerald-500/18 via-cyan-500/12 to-blue-500/18",
+    icon: "openai",
+  },
 ];
 
 const PROVIDER_MAP = PROVIDERS.reduce<Record<ProviderKey, ProviderConfig>>((acc, provider) => {
@@ -84,6 +100,8 @@ const PROVIDER_ASPECTS: Record<ProviderKey, AspectPreset["id"][]> = {
   openai: ["1:1", "3:2", "2:3"],
   flux: ["16:9", "3:2", "1:1", "4:5", "9:16"],
   merse: ["16:9", "3:2", "1:1", "4:5", "9:16"],
+  "nano-banana": ["16:9", "3:2", "1:1", "4:5", "9:16"],
+  "runway-gen4": ["16:9", "3:2", "1:1", "4:5", "9:16"],
 };
 
 type GeneratedImage = {

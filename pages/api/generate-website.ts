@@ -1,10 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import OpenAI from "openai";
 
+import { randomUUID } from "crypto";
 import { injectEffectStyles } from "@/lib/effects";
 import { injectPaletteStyles, buildImagePrompt, PaletteColors, injectAnimationHtml } from "@/lib/siteEnhancers";
 import { applyRateLimit } from "@/lib/rateLimit";
 import { logApiAction } from "@/lib/logger";
+import { adminDb } from "@/lib/firebaseAdmin";
+import { isR2Enabled, uploadBufferToR2 } from "@/server/storage/r2";
+import { addProjectEvent } from "@/lib/site/addProjectEvent";
 
 type WebsiteCodePayload = {
   summary: string;
@@ -42,7 +46,7 @@ type AnimationBrief = {
   html?: string;
 };
 
-type SuccessResponse = { website: WebsiteCodePayload };
+type SuccessResponse = { website: WebsiteCodePayload; projectId: string };
 type ErrorResponse = { error: string; details?: unknown };
 
 const openai = new OpenAI({
@@ -70,6 +74,47 @@ async function generateHeroImage(prompt: string) {
     console.error("Falha ao gerar imagem do site:", error);
     return null;
   }
+}
+
+async function bufferFromImageUrl(imageUrl: string): Promise<Buffer | null> {
+  try {
+    if (imageUrl.startsWith("data:")) {
+      const base64 = imageUrl.split(",")[1];
+      if (!base64) return null;
+      return Buffer.from(base64, "base64");
+    }
+    const response = await fetch(imageUrl);
+    if (!response.ok) return null;
+    const array = await response.arrayBuffer();
+    return Buffer.from(array);
+  } catch (error) {
+    console.error("Falha ao baixar imagem para R2:", error);
+    return null;
+  }
+}
+
+async function uploadHtmlToR2(html: string, projectId: string) {
+  if (!isR2Enabled()) return { url: null, key: null };
+  const key = `projects/${projectId}/build/index.html`;
+  const url = await uploadBufferToR2({
+    buffer: Buffer.from(html, "utf-8"),
+    contentType: "text/html; charset=utf-8",
+    key,
+  });
+  return { url, key };
+}
+
+async function uploadHeroToR2(imageUrl: string, projectId: string) {
+  if (!isR2Enabled()) return { url: imageUrl, key: null };
+  const buffer = await bufferFromImageUrl(imageUrl);
+  if (!buffer) return { url: imageUrl, key: null };
+  const key = `projects/${projectId}/images/hero.png`;
+  const url = await uploadBufferToR2({
+    buffer,
+    contentType: "image/png",
+    key,
+  });
+  return { url: url ?? imageUrl, key };
 }
 
 function injectHeroSection(html: string, imageUrl: string, siteName: string) {
@@ -194,7 +239,7 @@ export default async function handler(
     return res.status(500).json({ error: "Chave da OpenAI não configurada no servidor." });
   }
 
-const {
+  const {
     siteName,
     goal,
     menu,
@@ -209,10 +254,35 @@ const {
     structureOnly = false,
     paletteColors,
     paletteDescription,
+    projectId: incomingProjectId,
+    blueprint,
   } = req.body;
 
   if (!siteName || typeof siteName !== "string") {
     return res.status(400).json({ error: "Informe o nome do site." });
+  }
+
+  const projectId =
+    typeof incomingProjectId === "string" && incomingProjectId.trim().length > 0
+      ? incomingProjectId.trim()
+      : adminDb.collection("site_projects").doc().id;
+
+  try {
+    await adminDb.collection("site_projects").doc(projectId).set(
+      {
+        id: projectId,
+        siteName,
+        rawBrief: typeof rawBrief === "string" ? rawBrief : goal ?? "",
+        status: "assets_generating",
+        progress: 35,
+        currentStep: "Gerando HTML e assets",
+        updatedAt: Date.now(),
+      },
+      { merge: true },
+    );
+    await addProjectEvent(projectId, "Iniciando geração de código e assets", "info", "assets_generating");
+  } catch (error) {
+    console.error("Não foi possível registrar início do projeto no Firestore:", error);
   }
 
   try {
@@ -324,6 +394,15 @@ const {
       promptContext,
     ];
 
+    if (blueprint && typeof blueprint === "object") {
+      try {
+        const blueprintPreview = JSON.stringify(blueprint, null, 2).slice(0, 4500);
+        promptLines.push("", "Blueprint sugerido (use como referência, pode refinar):", blueprintPreview);
+      } catch {
+        // se não conseguir stringificar, ignora
+      }
+    }
+
     if (additionalBrief) {
       promptLines.push("", "Briefing detalhado:", additionalBrief);
     }
@@ -423,6 +502,62 @@ const {
       }
     }
 
+    // Salva assets em storage seguindo a estrutura recomendada
+    let savedHero = { url: website?.imageUrl ?? null, key: null as string | null };
+    let savedHtml = { url: null as string | null, key: null as string | null };
+
+    if (website?.imageUrl) {
+      const uploadedHero = await uploadHeroToR2(website.imageUrl, projectId);
+      savedHero = uploadedHero;
+      website.imageUrl = uploadedHero.url ?? website.imageUrl;
+    }
+
+    if (website?.html) {
+      const uploadedHtml = await uploadHtmlToR2(website.html, projectId);
+      savedHtml = uploadedHtml;
+    }
+
+    try {
+      await adminDb.collection("site_projects").doc(projectId).set(
+        {
+          id: projectId,
+          siteName,
+          rawBrief: typeof rawBrief === "string" ? rawBrief : goal ?? "",
+          status: "assets_ready",
+          progress: 75,
+          currentStep: "Assets prontos",
+          updatedAt: Date.now(),
+          assets: {
+            images: {
+              hero: savedHero.url
+                ? {
+                    url: savedHero.url,
+                    path: savedHero.key,
+                  }
+                : null,
+            },
+            build: {
+              index: savedHtml.url
+                ? {
+                    url: savedHtml.url,
+                    path: savedHtml.key,
+                  }
+                : null,
+            },
+          },
+          lastRun: {
+            structureOnly: Boolean(structureOnly),
+            hasImage: Boolean(website?.imageUrl),
+            modules: normalizedModules,
+          },
+        },
+        { merge: true },
+      );
+      await addProjectEvent(projectId, "Assets salvos no storage", "info", "assets_ready");
+    } catch (error) {
+      console.error("Falha ao salvar assets do projeto no Firestore:", error);
+    }
+
     await logApiAction({
       action: "generate-website",
       userId,
@@ -438,7 +573,7 @@ const {
       },
     });
 
-    return res.status(200).json({ website });
+    return res.status(200).json({ website, projectId });
   } catch (error) {
     console.error("Erro ao gerar código com OpenAI:", error);
     const message =

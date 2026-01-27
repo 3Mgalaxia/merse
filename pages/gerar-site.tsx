@@ -91,9 +91,9 @@ export default function GerarSite() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.4em] text-purple-200/70">Merse Generator</p>
-                <h1 className="mt-3 text-3xl font-semibold">Gerador de Sites via Replicate</h1>
+                <h1 className="mt-3 text-3xl font-semibold">Gerador de Sites</h1>
                 <p className="mt-3 max-w-2xl text-sm text-white/70">
-                  Use o motor Merse hospedado na Replicate para transformar prompts em sites completos,
+                  Use o motor Merse para transformar prompts em sites completos,
                   com identidade cósmica e componentes já alinhados ao Merse Builder.
                 </p>
               </div>
