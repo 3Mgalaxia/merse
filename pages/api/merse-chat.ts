@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 type ChatMessage = { role: "user" | "assistant" | "merse" | "system"; content: string };
 
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const openai = new OpenAI({ apiKey });
 
-  const mapped = messages.map((msg) => {
+  const mapped: ChatCompletionMessageParam[] = messages.map((msg) => {
     if (msg.role === "merse") return { role: "assistant", content: msg.content };
     if (msg.role === "user") return { role: "user", content: msg.content };
     if (msg.role === "system") return { role: "system", content: msg.content };
