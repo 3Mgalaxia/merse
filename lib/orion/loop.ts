@@ -67,7 +67,7 @@ export async function orionLoop(projectId: string) {
     return { projectId, status: "reviewing", action: "self-review" as const };
   }
 
-  if ((status === "review_done" || status === "assets_ready" || status === "reviewing") && score < 8.5 && canIterate) {
+  if (status === "review_done" && score < 8.5 && canIterate) {
     await addProjectEvent(projectId, "Reprocessando assets após nota abaixo do limiar.", "warning", "orion");
     await callEndpoint("/api/site/generate-assets", { projectId });
     return { projectId, status: "assets_generating", action: "generate-assets" as const };
