@@ -1,5 +1,15 @@
 import React from "react";
-import { adminDb } from "@/lib/firebaseAdmin";
+
+async function getAdminDb() {
+  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+  const mod = await import("@/lib/firebaseAdmin");
+  return mod.adminDb;
+}
 
 type BundleResult = {
   Main: React.ComponentType;
@@ -17,6 +27,8 @@ async function fetchCodeFromUrl(url?: string | null): Promise<string | null> {
 }
 
 export async function getProjectBundle(projectId: string): Promise<BundleResult | null> {
+  const adminDb = await getAdminDb();
+  if (!adminDb) return null;
   const snap = await adminDb.collection("site_projects").doc(projectId).get();
   if (!snap.exists) return null;
   const data = snap.data() ?? {};
