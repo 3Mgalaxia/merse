@@ -72,10 +72,9 @@ export async function verifyApiKey(token: string): Promise<ApiCaller | null> {
   void doc.ref.set({ lastUsedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
 
   return {
-    apiKey: token,
     apiKeyMask: maskKey(token),
     keyId: doc.id,
     userId: data.userId ?? undefined,
-    rateLimitTier: data.rateLimitTier ?? null,
+    tier: data.rateLimitTier ?? null,
   };
 }
