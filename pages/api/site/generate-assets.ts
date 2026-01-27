@@ -11,7 +11,7 @@ import AdmZip from "adm-zip";
 import { autoProgress } from "@/lib/site/autoProgress";
 
 type ErrorResponse = { error: string };
-type SuccessResponse = { projectId: string; status: string };
+type SuccessResponse = { projectId: string; status: string; downloadUrl?: string; message?: string };
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
