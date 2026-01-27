@@ -173,8 +173,11 @@ export default function AssistenteSite() {
       const data = (await response.json().catch(() => ({}))) as
         | SuggestionResponse
         | { error: string };
-      if (!response.ok || ("error" in data && data.error)) {
-        throw new Error("error" in data ? data.error : "Nao foi possivel gerar sugestoes.");
+      if ("error" in data && data.error) {
+        throw new Error(data.error);
+      }
+      if (!response.ok) {
+        throw new Error("Nao foi possivel gerar sugestoes.");
       }
       setResult(data);
     } catch (err) {
