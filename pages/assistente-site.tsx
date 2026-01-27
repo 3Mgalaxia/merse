@@ -171,10 +171,10 @@ export default function AssistenteSite() {
         }),
       });
       const data = (await response.json().catch(() => ({}))) as
-        | (SuggestionResponse & { error?: string })
+        | SuggestionResponse
         | { error: string };
-      if (!response.ok || data.error) {
-        throw new Error(data.error ?? "Nao foi possivel gerar sugestoes.");
+      if (!response.ok || ("error" in data && data.error)) {
+        throw new Error("error" in data ? data.error : "Nao foi possivel gerar sugestoes.");
       }
       setResult(data);
     } catch (err) {
