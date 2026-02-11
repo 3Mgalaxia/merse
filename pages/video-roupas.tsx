@@ -66,6 +66,7 @@ export default function VideoRoupas() {
   const [fabric, setFabric] = useState<string>(FABRIC_PRESETS[0]);
   const [duration, setDuration] = useState(8);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
+  const [referenceKind, setReferenceKind] = useState<"image" | "video" | null>(null);
   const [referencePayload, setReferencePayload] = useState<string | undefined>();
   const [renderResult, setRenderResult] = useState<RenderResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +92,7 @@ export default function VideoRoupas() {
     reader.onload = () => {
       const result = reader.result as string;
       setReferencePreview(result);
+      setReferenceKind(file.type.startsWith("video/") ? "video" : "image");
       setReferencePayload(result);
     };
     reader.readAsDataURL(file);
@@ -98,6 +100,7 @@ export default function VideoRoupas() {
 
   const handleClearReference = () => {
     setReferencePreview(null);
+    setReferenceKind(null);
     setReferencePayload(undefined);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -376,11 +379,20 @@ export default function VideoRoupas() {
                 />
                 {referencePreview ? (
                   <div className="flex w-full flex-col items-center gap-3">
-                    <img
-                      src={referencePreview}
-                      alt="Referência carregada"
-                      className="h-32 w-full rounded-xl object-cover shadow-lg"
-                    />
+                    {referenceKind === "video" ? (
+                      <video
+                        src={referencePreview}
+                        controls
+                        muted
+                        className="h-32 w-full rounded-xl object-cover shadow-lg"
+                      />
+                    ) : (
+                      <img
+                        src={referencePreview}
+                        alt="Referência carregada"
+                        className="h-32 w-full rounded-xl object-cover shadow-lg"
+                      />
+                    )}
                     <span className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-white/70">
                       <PiUploadSimpleFill />
                       Atualizar referência

@@ -14,9 +14,26 @@ type TierInfo = {
   accent: string;
   planKey?: keyof typeof planCatalog;
   isContactOnly?: boolean;
+  ctaLabel?: string;
 };
 
 const tiers: TierInfo[] = [
+  {
+    id: "navigator",
+    badge: "Guia",
+    title: "Plano Ideal",
+    subtitle: "Decida em 20 segundos",
+    highlight: "Responda 3 perguntas e eu recomendo 1 dos 4 planos",
+    priceLabel: "Recomendação automática",
+    priceValue: null,
+    features: [
+      "Recomenda Free, Pulse, Nebula ou Galáxia",
+      "Explica o porquê com base no seu uso",
+      "Te leva direto para o checkout certo",
+    ],
+    accent: "from-fuchsia-500/45 via-purple-500/15 to-cyan-500/0",
+    ctaLabel: "Descobrir meu plano",
+  },
   {
     id: "free",
     badge: "Explorar",
@@ -108,6 +125,13 @@ export default function Planos() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("credit");
+  const [finderOpen, setFinderOpen] = useState(false);
+  const [finderStep, setFinderStep] = useState(0);
+  const [finderGoal, setFinderGoal] = useState<"test" | "creator" | "pro" | "team" | null>(null);
+  const [finderVolume, setFinderVolume] = useState<"low" | "mid" | "high" | "ultra" | null>(null);
+  const [finderSupport, setFinderSupport] = useState<"none" | "guided" | null>(null);
+  const [finderResult, setFinderResult] = useState<TierInfo | null>(null);
+  const [highlightTierId, setHighlightTierId] = useState<string | null>(null);
   const [pixCheckout, setPixCheckout] = useState<{
     qrCode: string;
     qrCodeBase64?: string;
@@ -116,6 +140,7 @@ export default function Planos() {
   } | null>(null);
   const [pixCopyStatus, setPixCopyStatus] = useState<"idle" | "copied">("idle");
   const checkoutSectionRef = useRef<HTMLDivElement | null>(null);
+  const tierRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const selectedTierInfo = useMemo(() => {
     if (!selectedTier) return null;
@@ -123,19 +148,57 @@ export default function Planos() {
   }, [selectedTier]);
 
   const handleSelectTier = (tier: TierInfo) => {
+    if (tier.id === "navigator") {
+      setFinderOpen(true);
+      setFinderStep(0);
+      setFinderGoal(null);
+      setFinderVolume(null);
+      setFinderSupport(null);
+      setFinderResult(null);
+      return;
+    }
+
     setSelectedTier(tier);
-    if (tier.isContactOnly || !tier.planKey) {
+    if (tier.isContactOnly) {
       setSelectedTier(null);
       window.location.href =
         "mailto:hello@merse.gg?subject=Gal%C3%A1xia%20Prime%20-%20Quero%20um%20plano%20sob%20medida";
       return;
     }
+    if (!tier.planKey) return;
     setShowCheckout(true);
     setCheckoutError(null);
     setSelectedPaymentMethod("credit");
     setPixCheckout(null);
     setPixCopyStatus("idle");
   };
+
+  const recommendTier = (
+    goal: "test" | "creator" | "pro" | "team" | null,
+    volume: "low" | "mid" | "high" | "ultra" | null,
+    support: "none" | "guided" | null,
+  ) => {
+    if (!goal || !volume || !support) return null;
+    if (goal === "team") return tiers.find((t) => t.id === "galaxy") ?? null;
+
+    const volumeScore = volume === "low" ? 0 : volume === "mid" ? 1 : volume === "high" ? 2 : 3;
+    const supportScore = support === "guided" ? 1 : 0;
+    const goalScore = goal === "test" ? 0 : goal === "creator" ? 1 : 2;
+    const score = volumeScore + supportScore + goalScore;
+
+    if (score <= 1) return tiers.find((t) => t.id === "free") ?? null;
+    if (score <= 3) return tiers.find((t) => t.id === "pulse") ?? null;
+    return tiers.find((t) => t.id === "nebula") ?? null;
+  };
+
+  useEffect(() => {
+    if (!finderOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFinderOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [finderOpen]);
 
   useEffect(() => {
     if (!showCheckout) return;
@@ -280,11 +343,23 @@ export default function Planos() {
             const isCurrent = tier.planKey ? plan === tier.planKey : false;
             const limitLabel = tier.planKey
               ? `${planCatalog[tier.planKey].limit.toLocaleString("en-US")} créditos`
+              : tier.id === "navigator"
+              ? "Free • Pulse • Nebula • Galáxia"
               : tier.highlight;
             return (
               <div
                 key={tier.id}
-                className="group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-white/80 backdrop-blur-xl transition hover:border-white/30 hover:bg-white/10"
+                ref={(el) => {
+                  if (el) tierRefs.current.set(tier.id, el);
+                  else tierRefs.current.delete(tier.id);
+                }}
+                className={`group relative flex flex-col overflow-hidden rounded-3xl border bg-white/5 p-6 text-sm text-white/80 backdrop-blur-xl transition hover:bg-white/10 ${
+                  tier.id === "navigator" ? "md:col-span-2 lg:col-span-4" : ""
+                } ${
+                  highlightTierId === tier.id
+                    ? "border-purple-300/60 shadow-[0_0_0_1px_rgba(216,180,254,0.35)]"
+                    : "border-white/10 hover:border-white/30"
+                }`}
               >
                 <div
                   className={`pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br ${tier.accent} opacity-40 transition group-hover:opacity-60`}
@@ -331,13 +406,261 @@ export default function Planos() {
                       ? "Falar com a Merse"
                       : isCurrent
                       ? "Plano atual"
-                      : "Assinar agora"}
+                      : tier.ctaLabel ?? "Assinar agora"}
                   </button>
                 </div>
               </div>
             );
           })}
         </section>
+
+        {finderOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-10">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              aria-label="Fechar"
+              onClick={() => setFinderOpen(false)}
+            />
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-black/80 text-white shadow-[0_30px_90px_rgba(0,0,0,0.65)]">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/25 via-fuchsia-500/10 to-cyan-500/0" />
+              <div className="relative z-10 p-6 sm:p-8">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.35em] text-purple-200/80">
+                      Plano Ideal
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold">Qual plano combina com você?</h2>
+                    <p className="mt-2 text-sm text-white/70">
+                      Responda 3 perguntas rápidas e eu te levo para o plano certo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/80 transition hover:bg-white/10"
+                    onClick={() => setFinderOpen(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="mt-6 grid gap-4">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/50">
+                    <span>Pergunta {Math.min(finderStep + 1, 3)} / 3</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                      ~20s
+                    </span>
+                  </div>
+
+                  {finderStep === 0 ? (
+                    <div className="grid gap-3">
+                      <p className="text-sm font-semibold">Seu objetivo principal</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          {
+                            id: "test" as const,
+                            title: "Só testar",
+                            desc: "Quero explorar a Merse sem compromisso.",
+                          },
+                          {
+                            id: "creator" as const,
+                            title: "Criar com frequência",
+                            desc: "Posts, variações e experimentos semanais.",
+                          },
+                          {
+                            id: "pro" as const,
+                            title: "Profissional",
+                            desc: "Conteúdo recorrente e entrega para clientes.",
+                          },
+                          {
+                            id: "team" as const,
+                            title: "Equipe / empresa",
+                            desc: "Fluxo com governança e escala sob medida.",
+                          },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setFinderGoal(opt.id);
+                              setFinderStep(1);
+                            }}
+                            className={`rounded-2xl border px-4 py-4 text-left transition ${
+                              finderGoal === opt.id
+                                ? "border-purple-300/60 bg-purple-500/15"
+                                : "border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10"
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">{opt.title}</p>
+                            <p className="mt-1 text-xs text-white/60">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {finderStep === 1 ? (
+                    <div className="grid gap-3">
+                      <p className="text-sm font-semibold">Volume por mês (estimativa)</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          { id: "low" as const, title: "Até 50 imagens", desc: "Exploração e testes." },
+                          { id: "mid" as const, title: "50–200 imagens", desc: "Criação regular." },
+                          { id: "high" as const, title: "200–600 imagens", desc: "Produção intensa." },
+                          { id: "ultra" as const, title: "600+ imagens", desc: "Alta escala." },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setFinderVolume(opt.id);
+                              setFinderStep(2);
+                            }}
+                            className={`rounded-2xl border px-4 py-4 text-left transition ${
+                              finderVolume === opt.id
+                                ? "border-purple-300/60 bg-purple-500/15"
+                                : "border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10"
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">{opt.title}</p>
+                            <p className="mt-1 text-xs text-white/60">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {finderStep === 2 ? (
+                    <div className="grid gap-3">
+                      <p className="text-sm font-semibold">Nível de suporte</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          {
+                            id: "none" as const,
+                            title: "Autônomo",
+                            desc: "Só quero créditos e acesso aos recursos.",
+                          },
+                          {
+                            id: "guided" as const,
+                            title: "Guiado",
+                            desc: "Quero consultoria de prompts e automação.",
+                          },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setFinderSupport(opt.id);
+                              const result = recommendTier(finderGoal, finderVolume, opt.id);
+                              setFinderResult(result);
+                              setFinderStep(3);
+                            }}
+                            className={`rounded-2xl border px-4 py-4 text-left transition ${
+                              finderSupport === opt.id
+                                ? "border-purple-300/60 bg-purple-500/15"
+                                : "border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10"
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">{opt.title}</p>
+                            <p className="mt-1 text-xs text-white/60">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {finderStep >= 3 ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                      <p className="text-xs uppercase tracking-[0.35em] text-purple-200/80">
+                        Recomendação
+                      </p>
+                      <p className="mt-2 text-xl font-semibold">
+                        {finderResult?.title ?? "Não consegui decidir"}
+                      </p>
+                      <p className="mt-2 text-sm text-white/70">
+                        {finderResult?.id === "free"
+                          ? "Ideal para explorar a Merse com baixo volume e sem compromisso."
+                          : finderResult?.id === "pulse"
+                          ? "Ótimo para criação regular com um salto de créditos e projetos ativos."
+                          : finderResult?.id === "nebula"
+                          ? "Recomendado para produção intensa e para quem quer automação + suporte rápido."
+                          : finderResult?.id === "galaxy"
+                          ? "Para squads e empresas que precisam de escala, governança e modelos sob medida."
+                          : "Tente responder novamente para eu recomendar melhor."}
+                      </p>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          className="rounded-full border border-purple-300/30 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 px-5 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white"
+                          onClick={() => {
+                            if (!finderResult) {
+                              setFinderStep(0);
+                              setFinderGoal(null);
+                              setFinderVolume(null);
+                              setFinderSupport(null);
+                              return;
+                            }
+                            setFinderOpen(false);
+                            setHighlightTierId(finderResult.id);
+                            const el = tierRefs.current.get(finderResult.id);
+                            el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            window.setTimeout(() => setHighlightTierId(null), 2400);
+                            if (finderResult.planKey && finderResult.priceValue === 0) {
+                              setPlan(finderResult.planKey);
+                              return;
+                            }
+                            handleSelectTier(finderResult);
+                          }}
+                        >
+                          {finderResult?.isContactOnly
+                            ? "Falar com a Merse"
+                            : finderResult?.priceValue === 0
+                            ? "Ativar grátis"
+                            : "Assinar agora"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white/80 transition hover:bg-white/10"
+                          onClick={() => {
+                            setFinderStep(0);
+                            setFinderGoal(null);
+                            setFinderVolume(null);
+                            setFinderSupport(null);
+                            setFinderResult(null);
+                          }}
+                        >
+                          Refazer
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      className="text-xs uppercase tracking-[0.28em] text-white/60 transition hover:text-white disabled:opacity-40"
+                      onClick={() => {
+                        if (finderStep <= 0) return;
+                        if (finderStep === 3) {
+                          setFinderStep(2);
+                          return;
+                        }
+                        setFinderStep((s) => Math.max(0, s - 1));
+                      }}
+                      disabled={finderStep === 0}
+                    >
+                      Voltar
+                    </button>
+                    <p className="text-xs text-white/50">
+                      Dica: você pode mudar de plano a qualquer momento.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/80 backdrop-blur">
           <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-white">

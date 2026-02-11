@@ -1,0 +1,8 @@
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/_document": "pages/_document.js",
+  "/": "pages/index.js",
+  "/api/auth/vscode/create-code": "pages/api/auth/vscode/create-code.js",
+  "/auth/vscode": "pages/auth/vscode.js"
+}

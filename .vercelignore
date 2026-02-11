@@ -1,0 +1,17 @@
+# local/runtime temp
+.tmp-local-runtime
+
+# next build caches
+.next
+.next-dev
+.next-build
+
+# dependencies and vcs
+node_modules
+.git
+
+# local files
+.DS_Store
+
+# binaries / large artifacts
+*.dmg

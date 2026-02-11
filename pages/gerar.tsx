@@ -34,11 +34,17 @@ const moduleIconMap = {
   "criar-personagem": PiMaskHappyFill,
   chat: PiChatsFill,
   "codex-studio": PiCodeFill,
+  "projeto-online": PiCodeFill,
   "merse-desktop": PiDownloadSimpleFill,
   "site-ia": PiBrowsersFill,
   pricing: PiTrophyFill,
   "dev-hub": PiCodeFill,
   status: PiBrowsersFill,
+  "loop-ads-api": PiCodeFill,
+  loop: PiCodeFill,
+  "video-ads-api": PiCodeFill,
+  "goal-image-api": PiImageFillIcon,
+  "site-blueprint-api": PiBrowsersFill,
   showcase: PiImageFillIcon,
   "canvas-ia": PiBrowsersFill,
   "voz-ia": PiChatsFill,
@@ -77,12 +83,13 @@ const bannerTiles = [
     gradient: "from-amber-500/50 via-orange-500/30 to-transparent",
   },
   {
-    title: "Runway Wear – Vídeo",
-    description: "Envie a foto da roupa e receba um vídeo 3D fluindo em CG futurista.",
-    cta: "Fluxo fashion",
-    href: "/video-roupas",
-    image: "/banners/GERAR-ROUPA/GERAR-ROUPA123.png",
-    gradient: "from-teal-500/50 via-emerald-500/30 to-transparent",
+    title: "APIs Públicas Merse",
+    description:
+      "Conecte seu stack às engines Merse no Replicate e acelere protótipos de imagem, gênero e HTML.",
+    cta: "Acessar APIs",
+    href: "/apis-publicas",
+    image: "/banners/Merse-3.png",
+    gradient: "from-emerald-500/55 via-cyan-500/30 to-transparent",
   },
   {
     title: "Blueprint de Sites",
@@ -124,6 +131,14 @@ const moduleBlocks: Array<{
     icon: "gerar-video",
     accent: "from-blue-500/45 via-indigo-500/20 to-transparent",
   },
+  {
+    title: "Loop Automation Studio",
+    href: "/loop",
+    description:
+      "Monte fluxos n8n-style para encadear prompt, imagem e APIs de vídeo em um canvas de automação.",
+    icon: "loop",
+    accent: "from-cyan-500/55 via-blue-500/25 to-transparent",
+  },
   // 3. Vídeos corporativos
   {
     title: "Vídeos Corporativos",
@@ -148,7 +163,7 @@ const moduleBlocks: Array<{
     icon: "video-roupas",
     accent: "from-fuchsia-500/45 via-rose-500/20 to-transparent",
   },
-  // 6. Produtos 3D
+  // 7. Produtos 3D
   {
     title: "Objetos 3D",
     href: "/gerar-objeto",
@@ -156,7 +171,7 @@ const moduleBlocks: Array<{
     icon: "gerar-objeto",
     accent: "from-teal-500/45 via-emerald-500/20 to-transparent",
   },
-  // 7. Sites
+  // 8. Sites
   {
     title: "Blueprints de Sites",
     href: "/rascunhos-website",
@@ -164,7 +179,7 @@ const moduleBlocks: Array<{
     icon: "rascunhos-website",
     accent: "from-violet-500/45 via-cyan-500/20 to-transparent",
   },
-  // 8. Mentor de sites
+  // 9. Mentor de sites
   {
     title: "Mentor IA de Sites",
     href: "/assistente-site",
@@ -172,7 +187,7 @@ const moduleBlocks: Array<{
     icon: "site-ia",
     accent: "from-indigo-600/45 via-purple-500/30 to-transparent",
   },
-  // 9. Site IA
+  // 10. Site IA
   {
     title: "Site IA",
     href: "/site-ia",
@@ -180,7 +195,7 @@ const moduleBlocks: Array<{
     icon: "site-ia",
     accent: "from-blue-900/60 via-blue-700/45 to-black/65",
   },
-  // 10. Codex Studio
+  // 11. Codex Studio
   {
     title: "Codex Studio",
     href: "/codex-studio",
@@ -188,7 +203,16 @@ const moduleBlocks: Array<{
     icon: "codex-studio",
     accent: "from-purple-500/45 via-indigo-500/20 to-transparent",
   },
-  // 11. Codex Merse (VS Code)
+  // 12. Projeto Online Live
+  {
+    title: "Projeto Online Live",
+    href: "/projeto-online",
+    description:
+      "Escolha um projeto, veja runtime visual e edite em tempo real com comandos conectados ao Codex.",
+    icon: "projeto-online",
+    accent: "from-cyan-500/55 via-emerald-500/28 to-transparent",
+  },
+  // 12. Codex Merse (VS Code)
   {
     title: "Codex Merse (VS Code)",
     href: "https://marketplace.visualstudio.com/items?itemName=Merse.merse-codex",
@@ -196,7 +220,7 @@ const moduleBlocks: Array<{
     icon: "codex-studio",
     accent: "from-slate-900/60 via-purple-700/35 to-black/70",
   },
-  // 12. Dev Hub
+  // 13. Dev Hub
   {
     title: "Dev Hub",
     href: "/dev-hub",
@@ -204,7 +228,7 @@ const moduleBlocks: Array<{
     icon: "dev-hub",
     accent: "from-sky-500/70 via-cyan-400/55 to-indigo-900/80",
   },
-  // 13. Showcase Merse
+  // 14. Showcase Merse
   {
     title: "Showcase Merse",
     href: "/showcase",
@@ -212,7 +236,7 @@ const moduleBlocks: Array<{
     icon: "showcase",
     accent: "from-fuchsia-500/70 via-amber-400/55 to-purple-900/80",
   },
-  // 14. Canvas IA
+  // 15. Canvas IA
   {
     title: "Canvas IA",
     href: "/canvas-ia",
@@ -220,7 +244,7 @@ const moduleBlocks: Array<{
     icon: "canvas-ia",
     accent: "from-violet-500/70 via-blue-400/55 to-indigo-900/80",
   },
-  // 15. Voz IA Imersiva
+  // 16. Voz IA Imersiva
   {
     title: "Voz IA Imersiva",
     href: "/voz-ia",

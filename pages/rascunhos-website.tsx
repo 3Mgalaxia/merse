@@ -372,6 +372,35 @@ type WebsiteResult = {
   } | null;
 };
 
+type BlueprintSection = {
+  id: string;
+  type: "hero" | "features" | "gallery" | "pricing" | "contact" | "custom";
+  title?: string;
+  description?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+};
+
+type BlueprintPage = {
+  id: string;
+  slug: string;
+  title: string;
+  seoDescription?: string;
+  sections: BlueprintSection[];
+};
+
+type BlueprintResult = {
+  projectId: string;
+  source: "openai" | "fallback";
+  projectName: string;
+  brief: string;
+  tone: string;
+  audience: string;
+  cta: string;
+  brandColors: string[];
+  pages: BlueprintPage[];
+};
+
 const defaultState: FormState = {
   siteName: "Projeto Merse",
   goal: "Landing page para lançamento de IA",
@@ -408,6 +437,9 @@ export default function RascunhoWebsite() {
   const [state, setState] = useState<FormState>(defaultState);
   const [lastPalettePreset, setLastPalettePreset] = useState(defaultState.palette);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRenderingWebsite, setIsRenderingWebsite] = useState(false);
+  const [blueprintResult, setBlueprintResult] = useState<BlueprintResult | null>(null);
+  const [blueprintCopyStatus, setBlueprintCopyStatus] = useState<"idle" | "copied">("idle");
   const [result, setResult] = useState<WebsiteResult | null>(null);
   const [activeView, setActiveView] = useState<"preview" | "code">("preview");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
@@ -452,6 +484,10 @@ export default function RascunhoWebsite() {
   useEffect(() => {
     setSiteCopyStatus("idle");
   }, [sitePrediction?.html]);
+
+  useEffect(() => {
+    setBlueprintCopyStatus("idle");
+  }, [blueprintResult?.projectId]);
 
   useEffect(() => {
     if (state.palette && state.palette !== CUSTOM_PALETTE_ID) {
@@ -550,10 +586,192 @@ export default function RascunhoWebsite() {
     },
   });
 
+  const slugify = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+
+  const inferBrandColors = () => {
+    const explicit = state.paletteDescription
+      .split(/[,\n]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (explicit.length > 0) return explicit.slice(0, 8);
+
+    const palettePreview = `${paletteInfo?.preview ?? ""}`
+      .replace(/[•|]/g, ",")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return palettePreview.length > 0 ? palettePreview.slice(0, 8) : ["roxo", "azul"];
+  };
+
+  const inferAudience = () => {
+    if (!state.goal.trim()) return "Visitantes interessados no portal";
+    return `Pessoas interessadas em ${state.goal.trim().toLowerCase()}`;
+  };
+
+  const inferTone = () => {
+    const combined = `${state.layout.label} ${state.layout.description} ${state.notes}`.toLowerCase();
+    if (combined.includes("minimal")) return "minimalista";
+    if (combined.includes("corp")) return "corporativo";
+    if (combined.includes("lux")) return "luxo";
+    return "futurista";
+  };
+
+  const inferCta = () => {
+    if (state.modules.includes("pricing")) return "Ver planos";
+    if (state.modules.includes("portfolio")) return "Conhecer projetos";
+    return "Falar com a equipe";
+  };
+
+  const buildSeedPagesFromMenu = () => {
+    const labels = state.menu
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+
+    return labels.map((label, index) => ({
+      id: index === 0 ? "home" : slugify(label) || `pagina-${index + 1}`,
+      slug: index === 0 ? "/" : `/${slugify(label) || `pagina-${index + 1}`}`,
+      title: label,
+      seoDescription: `${label} - ${state.siteName}`,
+      sections: [
+        {
+          id: "hero",
+          type: "hero",
+          title: label,
+          description: state.goal,
+          ctaLabel: inferCta(),
+          ctaHref: "#contato",
+        },
+      ],
+    }));
+  };
+
+  const buildBlueprintPayload = (briefOverride?: string) => {
+    const menuSeed = buildSeedPagesFromMenu();
+    const briefSource = (briefOverride ?? "").trim();
+    const detailBrief = [
+      state.goal,
+      state.notes,
+      state.heroMood ? `Mood visual: ${state.heroMood}` : "",
+      state.layout.objective ? `Objetivo de layout: ${state.layout.objective}` : "",
+    ]
+      .filter((item) => item && item.trim().length > 0)
+      .join("\n");
+
+    return {
+      project_name: state.siteName || "Projeto Merse",
+      brief: briefSource || detailBrief || "Blueprint de site Merse com foco em conversão.",
+      brand_colors: inferBrandColors().join(", "),
+      tone: inferTone(),
+      audience: inferAudience(),
+      cta: inferCta(),
+      features_json: JSON.stringify({
+        preview: true,
+        seo: true,
+        auth: state.modules.includes("pricing"),
+        cms: state.modules.includes("portfolio"),
+      }),
+      pages_json: JSON.stringify(menuSeed),
+    };
+  };
+
+  const requestBlueprint = async (briefOverride?: string) => {
+    const payload = buildBlueprintPayload(briefOverride);
+    const response = await fetch("/api/site-blueprint/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error ?? "Não foi possível gerar o wireframe agora.");
+    }
+
+    const pages = Array.isArray(data.pages) ? (data.pages as BlueprintPage[]) : [];
+    const blueprint = (data.blueprint ?? {}) as {
+      project_name?: string;
+      brief?: string;
+      tone?: string;
+      audience?: string;
+      cta?: string;
+      brand_colors?: string[];
+    };
+
+    const normalizedBlueprint: BlueprintResult = {
+      projectId:
+        typeof data.project_id === "string" && data.project_id.trim().length > 0
+          ? data.project_id
+          : "site-blueprint",
+      source: data.source === "openai" ? "openai" : "fallback",
+      projectName: blueprint.project_name ?? state.siteName,
+      brief: blueprint.brief ?? payload.brief,
+      tone: blueprint.tone ?? payload.tone,
+      audience: blueprint.audience ?? payload.audience,
+      cta: blueprint.cta ?? payload.cta,
+      brandColors: Array.isArray(blueprint.brand_colors)
+        ? blueprint.brand_colors.filter((entry): entry is string => typeof entry === "string")
+        : inferBrandColors(),
+      pages,
+    };
+
+    setBlueprintResult(normalizedBlueprint);
+    return normalizedBlueprint;
+  };
+
+  const generateWebsiteFromBlueprint = async (briefOverride?: string) => {
+    if (!blueprintResult) {
+      throw new Error("Gere o wireframe antes de montar o site completo.");
+    }
+
+    const payload = {
+      ...buildBasePayload(),
+      goal: state.goal || "Geração completa a partir do blueprint",
+      notes: state.notes,
+      rawBrief: briefOverride ?? blueprintResult.brief,
+      blueprint: {
+        project_name: blueprintResult.projectName,
+        brief: blueprintResult.brief,
+        tone: blueprintResult.tone,
+        audience: blueprintResult.audience,
+        cta: blueprintResult.cta,
+        brand_colors: blueprintResult.brandColors,
+        pages: blueprintResult.pages,
+      },
+      projectId: blueprintResult.projectId,
+    };
+
+    const response = await fetch("/api/generate-website", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error ?? "Não foi possível gerar o site completo agora.");
+    }
+
+    setResult(data.website);
+    setActiveView("preview");
+    setCopyStatus("idle");
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+    setQuickError(null);
+    setResult(null);
+    setCopyStatus("idle");
 
     if (energy.plan === "free") {
       setErrorMessage("O plano Free não permite gerar blueprints de sites. Atualize seu plano para usar o laboratório Merse.");
@@ -561,25 +779,9 @@ export default function RascunhoWebsite() {
       return;
     }
 
-    const payload = buildBasePayload();
-
     try {
-      const response = await fetch("/api/generate-website", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Não foi possível gerar o blueprint agora.");
-      }
-
-      setResult(data.website);
-      setActiveView("preview");
+      await requestBlueprint();
     } catch (error) {
-      setResult(null);
       setErrorMessage(error instanceof Error ? error.message : "Erro inesperado ao gerar blueprint.");
     } finally {
       setIsSubmitting(false);
@@ -603,40 +805,42 @@ export default function RascunhoWebsite() {
     setErrorMessage(null);
     setIsQuickGenerating(true);
     setIsSubmitting(true);
-
-    const payload = {
-      ...buildBasePayload(),
-      goal: state.goal || "Geração automática de site via briefing rápido",
-      notes: `${state.notes}\n\nBriefing em texto livre:\n${trimmed}`,
-      rawBrief: trimmed,
-    };
+    setResult(null);
+    setCopyStatus("idle");
 
     try {
-      const response = await fetch("/api/generate-website", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Não foi possível gerar o site a partir do texto.");
-      }
-
-      setResult(data.website);
-      setActiveView("preview");
-      setCopyStatus("idle");
+      await requestBlueprint(trimmed);
     } catch (quickErrorResponse) {
-      setResult(null);
       setQuickError(
         quickErrorResponse instanceof Error
           ? quickErrorResponse.message
-          : "Erro inesperado ao gerar site via texto.",
+          : "Erro inesperado ao gerar wireframe via texto.",
       );
     } finally {
       setIsQuickGenerating(false);
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGenerateWebsiteFromBlueprint = async () => {
+    if (energy.plan === "free") {
+      setErrorMessage("Atualize seu plano para gerar o site completo a partir do wireframe.");
+      return;
+    }
+
+    setIsRenderingWebsite(true);
+    setErrorMessage(null);
+
+    try {
+      await generateWebsiteFromBlueprint();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Erro inesperado ao montar o site completo a partir do wireframe.",
+      );
+    } finally {
+      setIsRenderingWebsite(false);
     }
   };
 
@@ -1054,7 +1258,7 @@ export default function RascunhoWebsite() {
                     className="group inline-flex items-center justify-center gap-3 rounded-2xl border border-purple-400/60 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-8 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-white shadow-[0_20px_60px_rgba(168,85,247,0.35)] transition hover:brightness-[1.05] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <PiSparkleFill className={`text-lg transition ${isSubmitting ? "animate-spin" : ""}`} />
-                    {isSubmitting ? "Gerando blueprint..." : "Gerar rascunho"}
+                    {isSubmitting ? "Gerando wireframe..." : "Gerar wireframe"}
                   </button>
                 )}
               </div>
@@ -1124,10 +1328,10 @@ export default function RascunhoWebsite() {
             <div className="relative space-y-4">
               <header className="space-y-2">
                 <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">Gerar via texto</p>
-                <h2 className="text-xl font-semibold text-white">Descreva e receba o site instantâneo</h2>
+                <h2 className="text-xl font-semibold text-white">Descreva e receba o wireframe em segundos</h2>
                 <p className="text-sm text-white/70">
-                  Envie um briefing livre que será enviado ao modelo configurado no .env (OpenAI). Nós lapidamos o pedido
-                  e devolvemos o HTML completo com a identidade Merse.
+                  Envie um briefing livre para gerar páginas e seções do seu portal. Depois, se quiser,
+                  você transforma o wireframe em HTML completo com um clique.
                 </p>
               </header>
               <textarea
@@ -1135,7 +1339,7 @@ export default function RascunhoWebsite() {
                 onChange={(event) => setQuickBrief(event.target.value)}
                 placeholder="Ex.: Quero um site para vender minha inteligência artificial de roupas. Preciso de hero com vídeo, depoimentos e tabela de planos neon."
                 className="min-h-[140px] w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder-white/35 shadow-inner focus:border-purple-400/60 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isRenderingWebsite}
               />
               {quickError && (
                 <p className="text-xs font-semibold text-rose-200">{quickError}</p>
@@ -1144,13 +1348,13 @@ export default function RascunhoWebsite() {
                 <button
                   type="button"
                   onClick={handleQuickGenerate}
-                  disabled={isQuickGenerating || isSubmitting}
+                  disabled={isQuickGenerating || isSubmitting || isRenderingWebsite}
                   className="flex min-w-[200px] flex-1 items-center justify-center gap-2 rounded-2xl border border-purple-400/60 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-5 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-white shadow-[0_18px_45px_rgba(168,85,247,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <PiPaperPlaneTiltFill
                     className={`text-base ${isQuickGenerating ? "animate-pulse" : ""}`}
                   />
-                  {isQuickGenerating ? "Gerando site..." : "Gerar via texto"}
+                  {isQuickGenerating ? "Gerando wireframe..." : "Gerar wireframe via texto"}
                 </button>
                 <button
                   type="button"
@@ -1165,17 +1369,133 @@ export default function RascunhoWebsite() {
           </div>
 
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(255,255,255,0.08)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(56,189,248,0.2),transparent_55%)] opacity-80" />
+            <div className="relative space-y-5">
+              <header>
+                <p className="text-xs uppercase tracking-[0.4em] text-cyan-200/80">Blueprint em segundos</p>
+                <h2 className="text-2xl font-semibold text-white">Wireframe completo do portal</h2>
+              </header>
+
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-5 text-sm text-white/70">
+                {isSubmitting ? (
+                  <div className="space-y-4 animate-pulse">
+                    <div className="h-8 rounded-xl bg-white/10" />
+                    <div className="h-14 rounded-xl bg-white/10" />
+                    <div className="h-14 rounded-xl bg-white/10" />
+                    <div className="h-14 rounded-xl bg-white/10" />
+                  </div>
+                ) : blueprintResult ? (
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.32em]">
+                      <span className="rounded-full border border-white/15 bg-black/35 px-3 py-1 text-white/70">
+                        Projeto {blueprintResult.projectId}
+                      </span>
+                      <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-cyan-100/85">
+                        Fonte: {blueprintResult.source}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Tom</p>
+                        <p className="mt-2 text-white">{blueprintResult.tone}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">CTA</p>
+                        <p className="mt-2 text-white">{blueprintResult.cta}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {blueprintResult.pages.map((page) => (
+                        <article
+                          key={page.id}
+                          className="space-y-3 rounded-2xl border border-white/10 bg-black/35 p-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">{page.title}</p>
+                            <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-white/60">
+                              {page.slug}
+                            </span>
+                          </div>
+                          {page.seoDescription ? (
+                            <p className="text-xs text-white/65">{page.seoDescription}</p>
+                          ) : null}
+                          <div className="flex flex-wrap gap-2">
+                            {page.sections.map((section) => (
+                              <span
+                                key={`${page.id}-${section.id}`}
+                                className="rounded-full border border-cyan-300/25 bg-cyan-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.25em] text-cyan-100/85"
+                              >
+                                {section.type}
+                              </span>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateWebsiteFromBlueprint}
+                        disabled={isRenderingWebsite}
+                        className="inline-flex items-center gap-2 rounded-full border border-purple-400/60 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white shadow-[0_18px_40px_rgba(168,85,247,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <PiSparkleFill className={`text-base ${isRenderingWebsite ? "animate-spin" : ""}`} />
+                        {isRenderingWebsite ? "Montando site..." : "Gerar site completo"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!blueprintResult) return;
+                          try {
+                            await navigator.clipboard.writeText(JSON.stringify(blueprintResult.pages, null, 2));
+                            setBlueprintCopyStatus("copied");
+                            setTimeout(() => setBlueprintCopyStatus("idle"), 2500);
+                          } catch (copyError) {
+                            console.warn("Não foi possível copiar o wireframe:", copyError);
+                            setBlueprintCopyStatus("idle");
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        {blueprintCopyStatus === "copied" ? (
+                          <>
+                            <PiCheckBold />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <PiCopySimpleFill />
+                            Copiar JSON
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p>
+                    Descreva seu portal e gere o wireframe para visualizar páginas, seções e estrutura
+                    antes de renderizar o HTML final.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(255,255,255,0.08)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(168,85,247,0.2),transparent_55%)] opacity-80" />
             <div className="relative space-y-5">
               <header>
                   <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">
                     Laboratório Merse
                   </p>
-                  <h2 className="text-2xl font-semibold text-white">Código e visual gerados</h2>
+                  <h2 className="text-2xl font-semibold text-white">Site completo (opcional)</h2>
                 </header>
 
                 <div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-5 text-sm text-white/70">
-                  {isSubmitting ? (
+                  {isRenderingWebsite ? (
                     <div className="space-y-4 animate-pulse">
                       <div className="h-8 rounded-xl bg-white/10" />
                       <div className="h-20 rounded-xl bg-white/10" />
@@ -1314,13 +1634,13 @@ export default function RascunhoWebsite() {
                   ) : (
                     <div className="space-y-4 text-sm text-white/70">
                       <p>
-                        Gere o primeiro blueprint para visualizar o código pronto do site. Escolha layout,
-                        animações e descreva os diferenciais — a Merse devolve HTML + CSS estilizados no padrão intergaláctico.
+                        Gere o wireframe primeiro. Depois clique em <span className="text-white">Gerar site completo</span> para receber
+                        HTML + CSS estilizados no padrão intergaláctico.
                       </p>
                       <ul className="space-y-2">
-                        <li>• Ajuste paleta e layout para direcionar o tom do código gerado.</li>
-                        <li>• A animação escolhida injeta HTML pronto para o efeito de fundo.</li>
-                        <li>• Use as observações para pedir integrações, animações ou componentes específicos.</li>
+                        <li>• Ajuste paleta e layout para direcionar o tom do código final.</li>
+                        <li>• O blueprint guia a ordem das páginas e seções no HTML.</li>
+                        <li>• Use observações para pedir integrações, animações ou componentes específicos.</li>
                       </ul>
                     </div>
                   )}

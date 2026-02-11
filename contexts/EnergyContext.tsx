@@ -19,6 +19,23 @@ type DailyUsageSnapshot = {
   merseImages: number;
 };
 
+type UsageLogEntry = {
+  id: string;
+  path: string;
+  label: string;
+  amount: number;
+  createdAt: string;
+  date: string;
+};
+
+type UsageByPage = {
+  path: string;
+  label: string;
+  total: number;
+  count: number;
+  lastUsedAt: string;
+};
+
 type EnergyContextValue = {
   plan: PlanKey;
   planName: string;
@@ -26,14 +43,36 @@ type EnergyContextValue = {
   limit: number;
   percentUsed: number;
   remaining: number;
-  registerUsage: (amount?: number) => void;
+  registerUsage: (amount?: number, meta?: { source?: string; label?: string; path?: string }) => void;
   setPlan: (plan: PlanKey) => void;
   dailyUsage: DailyUsageSnapshot;
   canGenerateImage: (provider: GenerationProviderKey) => boolean;
   incrementDailyImageCount: (provider: GenerationProviderKey) => void;
+  usageLog: UsageLogEntry[];
+  usageByPage: UsageByPage[];
 };
 
 const STORAGE_KEY = "merse.energy";
+const USAGE_LOG_KEY = "merse.energy.log.v1";
+const MAX_LOG_ENTRIES = 200;
+const LOG_RETENTION_DAYS = 7;
+
+const PAGE_LABELS: Record<string, string> = {
+  "/gerar-foto": "Laboratório de Imagem",
+  "/gerar-video": "Gerador de Vídeos",
+  "/video-roupas": "Runway Wear",
+  "/videos-empresas": "Vídeos Corporativos",
+  "/loop-ads": "Loop Ads Engine",
+  "/criar-personagem": "Criador de Personas",
+  "/voz-ia": "Voz IA Imersiva",
+  "/trocar-generos": "Troca de Gênero",
+  "/canvas-ia": "Canvas IA",
+  "/gerar-objeto": "Objetos 3D",
+  "/rascunhos-website": "Blueprints de Sites",
+  "/site-ia": "Site IA",
+  "/builder": "Merse Builder",
+  "/codex-studio": "Codex Studio",
+};
 
 const EnergyContext = createContext<EnergyContextValue | undefined>(undefined);
 
@@ -56,6 +95,49 @@ function loadInitialState(): EnergySnapshot {
   }
 }
 
+function normalizePath(raw: string): string {
+  if (!raw) return "";
+  const [path] = raw.split(/[?#]/);
+  if (!path) return "";
+  if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
+  return path;
+}
+
+function toDateKey(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function isWithinDays(dateString: string, days: number): boolean {
+  if (!dateString) return false;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return date >= cutoff;
+}
+
+function resolveUsageLabel(path: string, fallback?: string): string {
+  if (path && PAGE_LABELS[path]) return PAGE_LABELS[path];
+  if (fallback) return fallback;
+  if (!path) return "Origem desconhecida";
+  return path.replace("/", "").replace(/-/g, " ").trim() || "Origem desconhecida";
+}
+
+function loadUsageLog(): UsageLogEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(USAGE_LOG_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as UsageLogEntry[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry) => entry && isWithinDays(entry.createdAt, LOG_RETENTION_DAYS));
+  } catch {
+    return [];
+  }
+}
+
 export function EnergyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [snapshot, setSnapshot] = useState<EnergySnapshot>({ plan: "free", usage: 0 });
@@ -65,6 +147,8 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     openaiImages: 0,
     merseImages: 0,
   });
+  const [usageLog, setUsageLog] = useState<UsageLogEntry[]>([]);
+  const [currentPath, setCurrentPath] = useState<string>("");
   const hasLoadedRef = useRef(false);
   const userDocRef = useMemo(() => {
     if (!user || !firebaseFirestore) return null;
@@ -88,6 +172,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     if (hasLoadedRef.current) return;
     const initialState = loadInitialState();
     setSnapshot(initialState);
+    setUsageLog(loadUsageLog());
     hasLoadedRef.current = true;
     setDailyUsage({
       date: todayKey,
@@ -100,6 +185,54 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     if (!hasLoadedRef.current || typeof window === "undefined") return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
+
+  useEffect(() => {
+    if (!hasLoadedRef.current || typeof window === "undefined") return;
+    window.localStorage.setItem(USAGE_LOG_KEY, JSON.stringify(usageLog));
+  }, [usageLog]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const readPath = () =>
+      normalizePath(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+
+    const updatePath = () => {
+      const path = readPath();
+      if (!path) return;
+      setCurrentPath((prev) => (prev === path ? prev : path));
+    };
+
+    updatePath();
+
+    const onChange = () => updatePath();
+    window.addEventListener("popstate", onChange);
+    window.addEventListener("hashchange", onChange);
+    window.addEventListener("locationchange", onChange as EventListener);
+
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+
+    window.history.pushState = function (...args) {
+      const result = originalPushState.apply(this, args as any);
+      window.dispatchEvent(new Event("locationchange"));
+      return result;
+    };
+
+    window.history.replaceState = function (...args) {
+      const result = originalReplaceState.apply(this, args as any);
+      window.dispatchEvent(new Event("locationchange"));
+      return result;
+    };
+
+    return () => {
+      window.removeEventListener("popstate", onChange);
+      window.removeEventListener("hashchange", onChange);
+      window.removeEventListener("locationchange", onChange as EventListener);
+      window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
+    };
+  }, []);
 
   useEffect(() => {
     if (!userDocRef) {
@@ -241,7 +374,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   const percentUsed = limit === 0 ? 0 : Math.min(100, Math.round((usage / limit) * 100));
   const remaining = Math.max(limit - usage, 0);
 
-  const registerUsage = (amount = 1) => {
+  const registerUsage = (amount = 1, meta?: { source?: string; label?: string; path?: string }) => {
     if (amount <= 0) return;
     setSnapshot((prev) => {
       const key = forcedPlan ?? prev.plan;
@@ -250,6 +383,26 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
         usage: Math.min(PLAN_CONFIG[key].limit, prev.usage + amount),
       };
       return next;
+    });
+
+    const resolvedPath =
+      meta?.path ??
+      currentPath ??
+      (typeof window !== "undefined" ? normalizePath(window.location.pathname) : "");
+    const resolvedLabel = resolveUsageLabel(resolvedPath, meta?.label ?? meta?.source);
+    const createdAt = new Date().toISOString();
+    const entry: UsageLogEntry = {
+      id: `usage-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+      path: resolvedPath,
+      label: resolvedLabel,
+      amount,
+      createdAt,
+      date: toDateKey(createdAt) || todayKey,
+    };
+
+    setUsageLog((prev) => {
+      const next = [entry, ...prev].filter((item) => item && isWithinDays(item.createdAt, LOG_RETENTION_DAYS));
+      return next.slice(0, MAX_LOG_ENTRIES);
     });
   };
 
@@ -317,6 +470,30 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     [dailyUsageDocRef],
   );
 
+  const usageByPage = useMemo<UsageByPage[]>(() => {
+    const map = new Map<string, UsageByPage>();
+    for (const entry of usageLog) {
+      const key = entry.path || entry.label;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          path: entry.path,
+          label: entry.label,
+          total: entry.amount,
+          count: 1,
+          lastUsedAt: entry.createdAt,
+        });
+      } else {
+        existing.total += entry.amount;
+        existing.count += 1;
+        if (entry.createdAt > existing.lastUsedAt) {
+          existing.lastUsedAt = entry.createdAt;
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [usageLog]);
+
   const value = useMemo<EnergyContextValue>(
     () => ({
       plan: planConfig.key,
@@ -330,6 +507,8 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       dailyUsage,
       canGenerateImage,
       incrementDailyImageCount,
+      usageLog,
+      usageByPage,
     }),
     [
       planConfig.key,
@@ -343,6 +522,8 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       dailyUsage,
       canGenerateImage,
       incrementDailyImageCount,
+      usageLog,
+      usageByPage,
     ],
   );
 

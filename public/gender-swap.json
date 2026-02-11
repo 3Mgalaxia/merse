@@ -15,7 +15,7 @@
       "userId": "demo-user",
       "original": "/banners/GERAR-OBJETO/GERAR-OBJETO2.png",
       "targetGender": "feminino",
-      "result": "/banners/GERAR-ROUPA/GERAR-ROUPA1.png",
+      "result": "/banners/GERAR-ROUPA/GERAR-ROUPA123.png",
       "prompt": "Transformar foto masculina em personagem feminina fashion cyberpunk",
       "intensity": 60,
       "createdAt": "2025-01-10T18:02:00Z"

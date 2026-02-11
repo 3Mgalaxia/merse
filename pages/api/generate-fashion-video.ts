@@ -6,8 +6,10 @@ import { isR2Enabled, uploadBufferToR2 } from "@/server/storage/r2";
 type SuccessResponse = {
   videoUrl: string;
   cover?: string;
-  duration?: number;
-  provider: "veo";
+  duration: number;
+  fabric?: string;
+  provider: string;
+  storyboard?: string;
 };
 
 type ErrorResponse = {
@@ -15,17 +17,40 @@ type ErrorResponse = {
 };
 
 type GenerationPayload = {
-  prompt?: string;
-  modelPreset?: string;
-  cameraAngle?: string;
-  fabric?: string;
-  duration?: number;
-  referenceImage?: string;
+  prompt?: unknown;
+  modelPreset?: unknown;
+  cameraAngle?: unknown;
+  fabric?: unknown;
+  duration?: unknown;
+  referenceImage?: unknown;
 };
 
 type ModelPreset = {
   label: string;
   description: string;
+};
+
+type PredictionStatus = {
+  id?: string;
+  status?: string;
+  output?: unknown;
+  error?: { message?: string; details?: string };
+};
+
+type ProviderConfig = {
+  key: string;
+  label: string;
+  model?: string;
+  version?: string;
+  token?: string;
+  pollInterval: number;
+  maxAttempts: number;
+  buildInput: (payload: {
+    prompt: string;
+    duration: number;
+    referenceImage?: string;
+    referenceVideo?: string;
+  }) => Record<string, unknown>;
 };
 
 const MODEL_PRESETS: Record<string, ModelPreset> = {
@@ -55,10 +80,15 @@ const cachedVersions = new Map<string, string>();
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "16mb",
+      sizeLimit: "24mb",
     },
   },
 };
+
+function sanitizeText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ").slice(0, maxLength);
+}
 
 function normalizeDuration(value: unknown) {
   const min = 4;
@@ -73,14 +103,20 @@ function normalizeDuration(value: unknown) {
   return min + steps * step;
 }
 
-function normalizeReferenceImage(referenceImage?: string) {
-  if (!referenceImage) return undefined;
-  const trimmed = referenceImage.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith("data:image/") || trimmed.startsWith("http")) {
-    return trimmed;
+function normalizeReferenceMedia(value: unknown): { image?: string; video?: string } {
+  if (typeof value !== "string") return {};
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+
+  if (trimmed.startsWith("data:image/")) return { image: trimmed };
+  if (trimmed.startsWith("data:video/")) return { video: trimmed };
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    if (/\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(trimmed)) return { video: trimmed };
+    return { image: trimmed };
   }
-  return undefined;
+
+  return {};
 }
 
 function buildFashionPrompt({
@@ -90,12 +126,12 @@ function buildFashionPrompt({
   fabric,
 }: {
   prompt: string;
-  modelPreset?: string;
-  cameraAngle?: string;
-  fabric?: string;
+  modelPreset: string;
+  cameraAngle: string;
+  fabric: string;
 }) {
-  const preset = modelPreset ? MODEL_PRESETS[modelPreset] : undefined;
-  const camera = cameraAngle ? CAMERA_ANGLES[cameraAngle] : undefined;
+  const preset = MODEL_PRESETS[modelPreset];
+  const camera = CAMERA_ANGLES[cameraAngle];
 
   const segments = [
     "Runway Wear Labs.",
@@ -104,10 +140,79 @@ function buildFashionPrompt({
     preset?.description ?? null,
     camera ? `Câmera: ${camera}.` : null,
     fabric ? `Tecido destaque: ${fabric}.` : null,
-    "Editorial fashion futurista, iluminação cinematográfica, textura do tecido em evidência.",
+    "Motion-capture fashion futurista, simulação física de tecido em 3D, microdetalhes realistas.",
+    "Iluminação cinematográfica, cortes elegantes, estética Merse premium.",
   ];
 
   return segments.filter((item) => item && String(item).trim()).join(" ");
+}
+
+function extractMessageText(content: unknown) {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+
+  const parts: string[] = [];
+  for (const chunk of content) {
+    if (typeof chunk === "string") {
+      parts.push(chunk);
+      continue;
+    }
+    if (chunk && typeof chunk === "object" && "text" in chunk) {
+      const text = (chunk as { text?: unknown }).text;
+      if (typeof text === "string") {
+        parts.push(text);
+      }
+    }
+  }
+
+  return parts.join("\n").trim();
+}
+
+async function generateStoryboard({
+  fashionPrompt,
+  duration,
+}: {
+  fashionPrompt: string;
+  duration: number;
+}) {
+  const fallback = [
+    `Cena 1 (0-${Math.max(1, Math.round(duration * 0.25))}s): reveal do look com luz lateral e textura de tecido.`,
+    "Cena 2: caminhada principal em passarela com movimento fluido de tecido.",
+    "Cena 3: close macro de fibras, costuras e acabamento.",
+    "Cena 4: giro final 360 com assinatura visual Merse.",
+  ].join("\n");
+
+  if (!process.env.OPENAI_API_KEY) return fallback;
+
+  try {
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: (process.env.OPENAI_RUNWAY_STORYBOARD_MODEL ?? "gpt-4o-mini").trim(),
+      temperature: 0.7,
+      max_tokens: 280,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você é diretor de fashion film. Responda em pt-BR com 4 cenas curtas, foco em motion capture e tecido 3D. Sem markdown.",
+        },
+        {
+          role: "user",
+          content: `Prompt fashion: ${fashionPrompt}\nDuração: ${duration}s`,
+        },
+      ],
+    });
+
+    const text = extractMessageText(completion.choices?.[0]?.message?.content);
+    return text || fallback;
+  } catch (error) {
+    console.error("[generate-fashion-video] storyboard fallback:", error);
+    return fallback;
+  }
 }
 
 async function generateOpenAIImage({
@@ -127,7 +232,7 @@ async function generateOpenAIImage({
   });
 
   const requestPayload: OpenAI.ImageGenerateParams = {
-    model: "gpt-image-1",
+    model: (process.env.OPENAI_RUNWAY_IMAGE_MODEL ?? "gpt-image-1").trim(),
     prompt,
     size: "auto",
     quality: "high",
@@ -160,6 +265,111 @@ async function generateOpenAIImage({
   throw new Error("A OpenAI não retornou uma imagem válida para continuar a geração.");
 }
 
+function buildProviders(): ProviderConfig[] {
+  return [
+    {
+      key: "minimax",
+      label: "MiniMax",
+      model: process.env.REPLICATE_MINIMAX_MODEL,
+      version: process.env.REPLICATE_MINIMAX_MODEL_VERSION,
+      token: process.env.REPLICATE_MINIMAX_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+      pollInterval: 3000,
+      maxAttempts: 45,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} Motion-capture runway with precise cloth dynamics.`,
+        duration,
+        aspect_ratio: "16:9",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+    {
+      key: "veo",
+      label: "Veo",
+      model: process.env.REPLICATE_VEO_MODEL ?? "google/veo-3",
+      version: process.env.REPLICATE_VEO_MODEL_VERSION,
+      token: process.env.REPLICATE_VEO_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+      pollInterval: 3000,
+      maxAttempts: 45,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} High-fashion cinematic grade and realistic physics.`,
+        duration,
+        video_length: duration,
+        aspect_ratio: "16:9",
+        resolution: "1080p",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+    {
+      key: "kling",
+      label: "Kling",
+      model: process.env.REPLICATE_KLING_MODEL ?? "kwaivgi/kling-v2.5-turbo-pro",
+      version: process.env.REPLICATE_KLING_MODEL_VERSION,
+      token: process.env.REPLICATE_KLING_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+      pollInterval: 2500,
+      maxAttempts: 40,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} Smooth movement and detailed textile highlights.`,
+        duration,
+        aspect_ratio: "16:9",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+    {
+      key: "wan",
+      label: "Wan",
+      model: process.env.REPLICATE_WAN_VIDEO_MODEL ?? "wan-video/wan-2.6-t2v",
+      version: process.env.REPLICATE_WAN_VIDEO_MODEL_VERSION,
+      token: process.env.REPLICATE_WAN_VIDEO_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+      pollInterval: 2500,
+      maxAttempts: 40,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} Clean fashion pacing and premium editorial flow.`,
+        duration,
+        aspect_ratio: "16:9",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+    {
+      key: "merse",
+      label: "Merse",
+      model: process.env.REPLICATE_MERSE_VIDEO_MODEL ?? process.env.REPLICATE_MERSE_MODEL,
+      version:
+        process.env.REPLICATE_MERSE_VIDEO_MODEL_VERSION ??
+        process.env.REPLICATE_MERSE_MODEL_VERSION,
+      token: process.env.REPLICATE_MERSE_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
+      pollInterval: 2500,
+      maxAttempts: 40,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} Merse identity, neon trims and futuristic runway ambiance.`,
+        duration,
+        aspect_ratio: "16:9",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+    {
+      key: "sora",
+      label: "Sora",
+      model: process.env.REPLICATE_SORA_MODEL ?? "openai/sora",
+      version: process.env.REPLICATE_SORA_MODEL_VERSION,
+      token: process.env.REPLICATE_API_TOKEN,
+      pollInterval: 3000,
+      maxAttempts: 45,
+      buildInput: ({ prompt, duration, referenceImage, referenceVideo }) => ({
+        prompt: `${prompt} Coherent narrative rhythm and photoreal cloth motion.`,
+        duration,
+        aspect_ratio: "16:9",
+        image: referenceImage || undefined,
+        video: referenceVideo || undefined,
+      }),
+    },
+  ];
+}
+
 async function resolveReplicateVersion(token: string, model: string) {
   const response = await fetch(`${REPLICATE_API_URL}/models/${model}`, {
     headers: {
@@ -187,28 +397,20 @@ async function resolveReplicateVersion(token: string, model: string) {
   return version.trim();
 }
 
-async function ensureReplicateVersion(token: string, model: string, version?: string | null) {
+async function ensureReplicateVersion(token: string, model: string, version?: string) {
   if (typeof version === "string" && version.trim()) {
-    cachedVersions.set(model, version.trim());
-    return version.trim();
+    const trimmed = version.trim();
+    cachedVersions.set(model, trimmed);
+    return trimmed;
   }
 
   const cached = cachedVersions.get(model);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
   const resolved = await resolveReplicateVersion(token, model);
   cachedVersions.set(model, resolved);
   return resolved;
 }
-
-type PredictionStatus = {
-  id?: string;
-  status?: string;
-  output?: unknown;
-  error?: { message?: string; details?: string };
-};
 
 async function runReplicatePrediction({
   token,
@@ -233,19 +435,16 @@ async function runReplicatePrediction({
     body: JSON.stringify({ version, input }),
   });
 
-  let creationJson: PredictionStatus | null = null;
-  try {
-    creationJson = (await creationResponse.json()) as PredictionStatus;
-  } catch {
-    creationJson = null;
-  }
+  const creationJson = (await creationResponse.json().catch(() => null)) as PredictionStatus | null;
 
   if (!creationResponse.ok || !creationJson) {
     const baseMessage =
       typeof creationJson?.error?.message === "string"
         ? creationJson.error.message
         : "Falha ao iniciar a geração na Replicate.";
-    throw new Error(baseMessage);
+    const details =
+      typeof creationJson?.error?.details === "string" ? ` ${creationJson.error.details}` : "";
+    throw new Error(`${baseMessage}${details}`);
   }
 
   const predictionId = creationJson.id;
@@ -283,7 +482,9 @@ async function runReplicatePrediction({
         typeof currentStatus?.error?.message === "string"
           ? currentStatus.error.message
           : "A geração de vídeo falhou na Replicate.";
-      throw new Error(message);
+      const details =
+        typeof currentStatus?.error?.details === "string" ? ` ${currentStatus.error.details}` : "";
+      throw new Error(`${message}${details}`);
     }
 
     if (currentStatus.status === "succeeded") {
@@ -362,52 +563,92 @@ function collectMedia(payload: unknown) {
   return { videos, covers, duration };
 }
 
-async function generateVideoWithReplicate({
+async function generateVideoWithFallback({
   prompt,
   duration,
   referenceImage,
+  referenceVideo,
 }: {
   prompt: string;
   duration: number;
-  referenceImage: string;
+  referenceImage?: string;
+  referenceVideo?: string;
 }) {
-  const token = process.env.REPLICATE_API_TOKEN;
-  if (!token) {
-    throw new Error("Defina REPLICATE_API_TOKEN no .env.local para gerar vídeos.");
+  const providers = buildProviders();
+  const failures: string[] = [];
+
+  for (const provider of providers) {
+    const model = provider.model?.trim();
+    const token = provider.token?.trim();
+    if (!model || !token) continue;
+
+    try {
+      const version = await ensureReplicateVersion(token, model, provider.version);
+      const baseInput = provider.buildInput({
+        prompt,
+        duration,
+        referenceImage,
+        referenceVideo,
+      });
+
+      try {
+        const prediction = await runReplicatePrediction({
+          token,
+          version,
+          input: baseInput,
+          pollInterval: provider.pollInterval,
+          maxAttempts: provider.maxAttempts,
+        });
+        const { videos, covers, duration: reportedDuration } = collectMedia(prediction.output);
+        if (!videos.length) throw new Error("sem URL de vídeo no output");
+        return {
+          videoUrl: videos[0],
+          cover: covers[0],
+          duration: reportedDuration ?? duration,
+          provider: provider.key,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "erro desconhecido";
+        const hasReferenceFields =
+          Object.prototype.hasOwnProperty.call(baseInput, "image") ||
+          Object.prototype.hasOwnProperty.call(baseInput, "video");
+        if (!hasReferenceFields || !/(image|video|input)/i.test(message)) {
+          throw error;
+        }
+
+        const fallbackInput = { ...baseInput };
+        delete (fallbackInput as Record<string, unknown>).image;
+        delete (fallbackInput as Record<string, unknown>).video;
+
+        const prediction = await runReplicatePrediction({
+          token,
+          version,
+          input: fallbackInput,
+          pollInterval: provider.pollInterval,
+          maxAttempts: provider.maxAttempts,
+        });
+        const { videos, covers, duration: reportedDuration } = collectMedia(prediction.output);
+        if (!videos.length) throw new Error("sem URL de vídeo no output");
+        return {
+          videoUrl: videos[0],
+          cover: covers[0],
+          duration: reportedDuration ?? duration,
+          provider: provider.key,
+        };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "erro desconhecido";
+      failures.push(`${provider.label}: ${message}`);
+      console.error(`[generate-fashion-video] provider ${provider.label} falhou:`, error);
+    }
   }
 
-  const model = process.env.REPLICATE_VEO_MODEL ?? "openai/sora-2";
-  const version = process.env.REPLICATE_VEO_MODEL_VERSION ?? null;
-  if (!model) {
-    throw new Error("REPLICATE_VEO_MODEL não configurado.");
-  }
-
-  const resolvedVersion = await ensureReplicateVersion(token, model, version);
-  const input: Record<string, unknown> = {
-    prompt,
-    duration,
-    aspect_ratio: "16:9",
-    image: referenceImage,
-  };
-
-  const prediction = await runReplicatePrediction({
-    token,
-    version: resolvedVersion,
-    input,
-    pollInterval: 3000,
-    maxAttempts: 45,
-  });
-
-  const { videos, covers, duration: reportedDuration } = collectMedia(prediction.output);
-  if (!videos.length) {
-    throw new Error("A Replicate não retornou URL de vídeo. Tente novamente.");
-  }
-
-  return {
-    videoUrl: videos[0],
-    cover: covers[0],
-    duration: reportedDuration ?? duration,
-  };
+  const details = failures.slice(0, 6).join(" | ");
+  throw new Error(
+    details
+      ? `Nenhum provedor conseguiu gerar o vídeo fashion. ${details}`
+      : "Nenhum provedor conseguiu gerar o vídeo fashion.",
+  );
 }
 
 export default async function handler(
@@ -419,28 +660,22 @@ export default async function handler(
     return res.status(405).json({ error: "Método não suportado." });
   }
 
-  const {
-    prompt,
-    modelPreset,
-    cameraAngle,
-    fabric,
-    duration,
-    referenceImage,
-  } = req.body as GenerationPayload;
+  const body = (req.body ?? {}) as GenerationPayload;
+  const prompt = sanitizeText(body.prompt, 1200);
+  const modelPreset = sanitizeText(body.modelPreset, 60) || "metahuman";
+  const cameraAngle = sanitizeText(body.cameraAngle, 60) || "orbit";
+  const fabric = sanitizeText(body.fabric, 120) || "Tecno holográfico";
+  const normalizedDuration = normalizeDuration(body.duration);
+  const referenceMedia = normalizeReferenceMedia(body.referenceImage);
 
-  const trimmedPrompt = typeof prompt === "string" ? prompt.trim() : "";
-  const hasReference =
-    typeof referenceImage === "string" && Boolean(referenceImage.trim());
-  const normalizedReference = normalizeReferenceImage(referenceImage);
-
-  if (!trimmedPrompt && !hasReference) {
+  if (!prompt && !referenceMedia.image && !referenceMedia.video) {
     return res
       .status(400)
       .json({ error: "Envie um prompt ou uma referência para gerar o vídeo fashion." });
   }
 
   try {
-    const basePrompt = trimmedPrompt || "Look fashion inspirado na referência enviada.";
+    const basePrompt = prompt || "Look fashion inspirado na referência enviada.";
     const fashionPrompt = buildFashionPrompt({
       prompt: basePrompt,
       modelPreset,
@@ -448,22 +683,39 @@ export default async function handler(
       fabric,
     });
 
-    const imagePrompt = `${fashionPrompt} Foto editorial em alta resolução, corpo inteiro, fundo limpo.`;
-    const videoPrompt = `${fashionPrompt} Movimento suave de passarela, tecidos fluidos, câmera cinematográfica.`;
-
-    const baseImageUrl = await generateOpenAIImage({
-      prompt: imagePrompt,
-      referenceImage: normalizedReference,
+    const storyboard = await generateStoryboard({
+      fashionPrompt,
+      duration: normalizedDuration,
     });
 
-    const normalizedDuration = normalizeDuration(duration);
-    const videoResult = await generateVideoWithReplicate({
+    const imagePrompt = `${fashionPrompt} Foto editorial em alta resolução, corpo inteiro, fundo limpo.`;
+    const videoPrompt = `${fashionPrompt} ${storyboard}`;
+
+    let referenceImageForVideo = referenceMedia.image;
+    if (!referenceImageForVideo) {
+      try {
+        referenceImageForVideo = await generateOpenAIImage({
+          prompt: imagePrompt,
+          referenceImage: referenceMedia.image,
+        });
+      } catch (imageError) {
+        console.error("[generate-fashion-video] falha ao gerar frame-base:", imageError);
+      }
+    }
+
+    const videoResult = await generateVideoWithFallback({
       prompt: videoPrompt,
       duration: normalizedDuration,
-      referenceImage: baseImageUrl,
+      referenceImage: referenceImageForVideo,
+      referenceVideo: referenceMedia.video,
     });
 
-    return res.status(200).json({ ...videoResult, provider: "veo" });
+    return res.status(200).json({
+      ...videoResult,
+      duration: videoResult.duration ?? normalizedDuration,
+      fabric,
+      storyboard,
+    });
   } catch (error) {
     console.error("Erro ao gerar vídeo fashion:", error);
     const message =

@@ -49,6 +49,13 @@ type GeneratedRender = {
   angle?: string;
 };
 
+type GeneratedDownload = {
+  id: string;
+  url: string;
+  type: string;
+  provider?: string;
+};
+
 export default function GerarObjeto() {
   const router = useRouter();
   const energy = useEnergy();
@@ -62,6 +69,8 @@ export default function GerarObjeto() {
   const [productReference, setProductReference] = useState<string | null>(null);
   const [brandReference, setBrandReference] = useState<string | null>(null);
   const [renders, setRenders] = useState<GeneratedRender[]>([]);
+  const [downloads, setDownloads] = useState<GeneratedDownload[]>([]);
+  const [providerUsed, setProviderUsed] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +134,8 @@ export default function GerarObjeto() {
     setIsLoading(true);
     setError(null);
     setRenders([]);
+    setDownloads([]);
+    setProviderUsed(null);
 
     try {
       const response = await fetch("/api/generate-object", {
@@ -167,30 +178,46 @@ export default function GerarObjeto() {
           ]
         : [];
 
-      if (!generated.length) {
-        throw new Error("A resposta não trouxe renders. Tente novamente.");
+      const generatedDownloads: GeneratedDownload[] = Array.isArray(data.downloads)
+        ? data.downloads
+            .map((entry: any, index: number) => ({
+              id: `download-${Date.now()}-${index}`,
+              url: typeof entry?.url === "string" ? entry.url : "",
+              type: typeof entry?.type === "string" ? entry.type : "model",
+              provider: typeof entry?.provider === "string" ? entry.provider : undefined,
+            }))
+            .filter((entry: GeneratedDownload) => entry.url.length > 0)
+        : [];
+
+      if (!generated.length && !generatedDownloads.length) {
+        throw new Error("A resposta não trouxe renders nem arquivos 3D. Tente novamente.");
       }
 
       setRenders(generated);
+      setDownloads(generatedDownloads);
+      setProviderUsed(typeof data.provider === "string" ? data.provider : null);
       energy.registerUsage(COST_PER_OBJECT);
 
       const lightingLabel =
         LIGHTING_PRESETS.find((preset) => preset.id === lighting)?.label ?? lighting;
       const timestamp = new Date().toISOString();
-      const records = generated.map((render) => ({
-        id: generateCreationId("object"),
-        type: "object" as const,
-        prompt,
-        createdAt: timestamp,
-        previewUrl: render.imageUrl,
-        downloadUrl: render.imageUrl,
-        meta: {
-          material: material.label,
-          lighting: lightingLabel,
-          detalhe: `${detailLevel}%`,
-        },
-      }));
-      await appendUserCreations(userKey, records, { userId: user?.uid });
+      if (generated.length > 0) {
+        const records = generated.map((render) => ({
+          id: generateCreationId("object"),
+          type: "object" as const,
+          prompt,
+          createdAt: timestamp,
+          previewUrl: render.imageUrl,
+          downloadUrl: render.imageUrl,
+          meta: {
+            material: material.label,
+            lighting: lightingLabel,
+            detalhe: `${detailLevel}%`,
+            provider: typeof data.provider === "string" ? data.provider : undefined,
+          },
+        }));
+        await appendUserCreations(userKey, records, { userId: user?.uid });
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Geração cancelada.");
@@ -512,7 +539,38 @@ export default function GerarObjeto() {
               Pré-visualize as variações, baixe as melhores e refine materiais ou iluminação para
               explorar novas combinações.
             </p>
+            {providerUsed ? (
+              <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/75">
+                Engine ativa: {providerUsed}
+              </p>
+            ) : null}
           </header>
+
+          {downloads.length > 0 && (
+            <section className="rounded-3xl border border-cyan-300/25 bg-cyan-500/10 p-5 text-white/80">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-cyan-100/90">
+                  Arquivos 3D prontos
+                </p>
+                <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-100/70">
+                  {downloads.length} download{downloads.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {downloads.map((asset) => (
+                  <a
+                    key={asset.id}
+                    href={asset.url}
+                    download
+                    className="inline-flex items-center gap-2 rounded-full border border-cyan-100/35 bg-black/35 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-50 transition hover:border-cyan-100/70 hover:bg-black/55"
+                  >
+                    <PiDownloadSimpleFill />
+                    {asset.type}
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-5 md:grid-cols-2">
             {renders.map((render) => (

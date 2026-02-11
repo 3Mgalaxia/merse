@@ -1,10 +1,36 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Head from "next/head";
+
+type AnalysisBucket = {
+  score: number;
+  diagnosis: string;
+  actions: string[];
+};
+
+type RoadmapItem = {
+  priority: "alta" | "media" | "baixa";
+  task: string;
+  impact: string;
+  effort: string;
+};
 
 type SuggestionResponse = {
   suggestions: string[];
   headline: string;
   callouts?: string[];
+  analysis?: {
+    layout: AnalysisBucket;
+    contrast: AnalysisBucket;
+    hierarchy: AnalysisBucket;
+    cta: AnalysisBucket;
+    responsive: AnalysisBucket;
+  };
+  quickWins?: string[];
+  roadmap?: RoadmapItem[];
+  provider?: "openai" | "fallback";
+  mode?: "quick" | "deep";
+  generatedAt?: string;
+  latencyMs?: number;
 };
 
 const isSuggestionResponse = (data: unknown): data is SuggestionResponse => {
@@ -16,6 +42,13 @@ const isSuggestionResponse = (data: unknown): data is SuggestionResponse => {
     value.suggestions.every((item) => typeof item === "string")
   );
 };
+
+const SCORE_LABELS = [
+  { min: 85, label: "Excelente" },
+  { min: 70, label: "Bom" },
+  { min: 55, label: "Atencao" },
+  { min: 0, label: "Critico" },
+];
 
 const QUICK_BRIEFS = [
   {
@@ -70,6 +103,8 @@ export default function AssistenteSite() {
   const [selectedAudience, setSelectedAudience] = useState<string | null>(null);
   const [selectedTone, setSelectedTone] = useState<string | null>(null);
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
+  const [liveMode, setLiveMode] = useState(true);
+  const [analysisMode, setAnalysisMode] = useState<"quick" | "deep">("deep");
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
   const [referencePayload, setReferencePayload] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
@@ -77,7 +112,10 @@ export default function AssistenteSite() {
   const [result, setResult] = useState<SuggestionResponse | null>(null);
   const [copyBriefStatus, setCopyBriefStatus] = useState<"idle" | "copied">("idle");
   const [copyResultStatus, setCopyResultStatus] = useState<"idle" | "copied">("idle");
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const liveHashRef = useRef<string>("");
 
   const combinedPrompt = useMemo(() => {
     const lines: string[] = [];
@@ -93,6 +131,10 @@ export default function AssistenteSite() {
     () => combinedPrompt.trim().length > 0 || Boolean(referencePayload),
     [combinedPrompt, referencePayload],
   );
+  const canRunLive = useMemo(
+    () => Boolean(referencePayload) || combinedPrompt.trim().length >= 20,
+    [combinedPrompt, referencePayload],
+  );
 
   const wordCount = useMemo(() => {
     const trimmed = combinedPrompt.trim();
@@ -100,20 +142,89 @@ export default function AssistenteSite() {
     return trimmed.split(/\s+/).filter(Boolean).length;
   }, [combinedPrompt]);
 
+  const getScoreLabel = (score: number) => {
+    return SCORE_LABELS.find((entry) => score >= entry.min)?.label ?? "N/A";
+  };
+
+  const analysisCards = useMemo(() => {
+    if (!result?.analysis) return [];
+    return [
+      { key: "layout", title: "Layout", data: result.analysis.layout },
+      { key: "contrast", title: "Contraste", data: result.analysis.contrast },
+      { key: "hierarchy", title: "Hierarquia", data: result.analysis.hierarchy },
+      { key: "cta", title: "CTA", data: result.analysis.cta },
+      { key: "responsive", title: "Responsivo", data: result.analysis.responsive },
+    ];
+  }, [result]);
+
+  const liveHash = useMemo(
+    () =>
+      [
+        combinedPrompt.trim(),
+        selectedGoal ?? "",
+        selectedAudience ?? "",
+        selectedTone ?? "",
+        focusAreas.join("|"),
+        referencePayload ? `${referencePayload.slice(0, 64)}:${referencePayload.length}` : "",
+      ].join("::"),
+    [combinedPrompt, selectedGoal, selectedAudience, selectedTone, focusAreas, referencePayload],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   const handlePickFile = () => {
     fileInputRef.current?.click();
   };
 
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const optimizeUploadedImage = async (file: File): Promise<string> => {
+    const readAsDataUrl = () =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Nao foi possivel ler a imagem."));
+        reader.readAsDataURL(file);
+      });
+
+    const raw = await readAsDataUrl();
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Nao foi possivel processar a screenshot."));
+      image.src = raw;
+    });
+
+    const maxEdge = 1600;
+    const ratio = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const targetWidth = Math.max(1, Math.round(img.width * ratio));
+    const targetHeight = Math.max(1, Math.round(img.height * ratio));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return raw;
+
+    context.drawImage(img, 0, 0, targetWidth, targetHeight);
+    return canvas.toDataURL("image/jpeg", 0.88);
+  };
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setReferencePreview(base64);
-      setReferencePayload(base64);
-    };
-    reader.readAsDataURL(file);
+    setError(null);
+    try {
+      const optimized = await optimizeUploadedImage(file);
+      setReferencePreview(optimized);
+      setReferencePayload(optimized);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Falha ao carregar screenshot.");
+    }
   };
 
   const handleClearImage = () => {
@@ -145,7 +256,24 @@ export default function AssistenteSite() {
 
   const handleCopyResult = async () => {
     if (!result) return;
-    const text = [result.headline, ...result.suggestions].join("\n");
+    const scoreLine = result.analysis
+      ? [
+          `Layout: ${result.analysis.layout.score}`,
+          `Contraste: ${result.analysis.contrast.score}`,
+          `Hierarquia: ${result.analysis.hierarchy.score}`,
+          `CTA: ${result.analysis.cta.score}`,
+          `Responsivo: ${result.analysis.responsive.score}`,
+        ].join(" | ")
+      : "";
+    const text = [
+      result.headline,
+      scoreLine,
+      ...result.suggestions,
+      ...(result.quickWins ?? []),
+      ...(result.roadmap ?? []).map((item) => `[${item.priority}] ${item.task} -> ${item.impact}`),
+    ]
+      .filter(Boolean)
+      .join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setCopyResultStatus("copied");
@@ -156,21 +284,40 @@ export default function AssistenteSite() {
   };
 
   const handleClearAll = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setPrompt("");
     setSelectedGoal(null);
     setSelectedAudience(null);
     setSelectedTone(null);
+    setLiveMode(true);
+    setAnalysisMode("deep");
     setFocusAreas([]);
+    setLastUpdated(null);
+    liveHashRef.current = "";
     handleClearImage();
     setResult(null);
     setError(null);
   };
 
-  const handleSubmit = async () => {
-    if (!canSubmit || isLoading) return;
+  const runAnalysis = async (source: "manual" | "live" = "manual") => {
+    if (!canSubmit) return;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    liveHashRef.current = liveHash;
     setIsLoading(true);
     setError(null);
-    setResult(null);
+    if (source === "manual") {
+      setResult(null);
+    }
+
     try {
       const response = await fetch("/api/assistente-site", {
         method: "POST",
@@ -178,31 +325,65 @@ export default function AssistenteSite() {
         body: JSON.stringify({
           prompt: combinedPrompt.trim() || undefined,
           image: referencePayload,
+          goal: selectedGoal ?? undefined,
+          audience: selectedAudience ?? undefined,
+          tone: selectedTone ?? undefined,
+          focusAreas,
+          mode: source === "live" ? "quick" : analysisMode,
         }),
+        signal: controller.signal,
       });
       const data = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
         const message =
           data && typeof data === "object" && "error" in data
-            ? String((data as { error?: string }).error ?? "Nao foi possivel gerar sugestoes.")
-            : "Nao foi possivel gerar sugestoes.";
+            ? String((data as { error?: string }).error ?? "Nao foi possivel gerar o diagnostico.")
+            : "Nao foi possivel gerar o diagnostico.";
         throw new Error(message);
       }
       if (!isSuggestionResponse(data)) {
-        throw new Error("Nao foi possivel gerar sugestoes.");
+        throw new Error("Nao foi possivel gerar o diagnostico.");
       }
       setResult(data);
+      setLastUpdated(
+        typeof data.generatedAt === "string" && data.generatedAt.length > 0
+          ? data.generatedAt
+          : new Date().toISOString(),
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro inesperado ao gerar sugestoes.");
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      if ((err as Error)?.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "Erro inesperado ao gerar diagnostico.");
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsLoading(false);
     }
   };
 
+  const handleSubmit = async () => {
+    if (!canSubmit || isLoading) return;
+    await runAnalysis("manual");
+  };
+
+  useEffect(() => {
+    if (!liveMode) return;
+    if (!canSubmit || !canRunLive) return;
+    if (isLoading) return;
+    if (liveHashRef.current === liveHash) return;
+
+    const timer = window.setTimeout(() => {
+      void runAnalysis("live");
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [liveMode, canSubmit, canRunLive, isLoading, liveHash]);
+
   return (
     <>
       <Head>
-        <title>Assistente de Site · Merse</title>
+        <title>Mentor IA de Sites · Merse</title>
       </Head>
       <main className="relative min-h-screen overflow-hidden bg-black px-6 pb-20 pt-24 text-white">
         <div className="pointer-events-none fixed inset-0 -z-10">
@@ -213,25 +394,25 @@ export default function AssistenteSite() {
 
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
           <header className="space-y-4">
-            <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">Assistente de Site</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-purple-200/80">Mentor IA de Sites</p>
             <h1 className="text-3xl font-semibold md:text-4xl">
               <span className="bg-gradient-to-r from-purple-400 via-pink-500 to-cyan-400 bg-clip-text text-transparent">
-                Peça sugestoes de layout a IA Merse
+                Envie screenshots e receba dicas em tempo real
               </span>
             </h1>
             <p className="max-w-3xl text-sm text-white/70">
-              Envie uma screenshot ou descreva o contexto. A Merse sugere hierarquia, tipografia, CTA e
-              ritmo visual para elevar o design em minutos.
+              O mentor Merse analisa layout, contraste, hierarquia, CTA e responsividade. Ajuste o foco
+              e refine seu site com diagnosticos acionaveis em segundos.
             </p>
             <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.32em] text-white/70">
               <span className="rounded-full border border-purple-300/20 bg-white/10 px-4 py-1">
-                resposta objetiva
+                layout e ux
               </span>
               <span className="rounded-full border border-purple-300/20 bg-white/10 px-4 py-1">
-                prioriza conversao
+                contraste e leitura
               </span>
               <span className="rounded-full border border-purple-300/20 bg-white/10 px-4 py-1">
-                foco em mobile
+                feedback em tempo real
               </span>
             </div>
           </header>
@@ -352,6 +533,44 @@ export default function AssistenteSite() {
                 </div>
               </div>
 
+              <div className="space-y-3 rounded-2xl border border-purple-300/20 bg-black/35 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.32em] text-white/60">Modo de analise</p>
+                  <button
+                    type="button"
+                    onClick={() => setLiveMode((prev) => !prev)}
+                    className={`rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.32em] transition ${
+                      liveMode
+                        ? "border-cyan-300/60 bg-cyan-500/15 text-cyan-100"
+                        : "border-white/20 bg-white/10 text-white/70 hover:border-white/40 hover:text-white"
+                    }`}
+                  >
+                    {liveMode ? "Tempo real: ON" : "Tempo real: OFF"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["quick", "deep"] as const).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setAnalysisMode(item)}
+                      className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] transition ${
+                        analysisMode === item
+                          ? "border-purple-300/60 bg-purple-500/15 text-white"
+                          : "border-purple-300/20 bg-white/5 text-white/60 hover:border-purple-200/40 hover:text-white"
+                      }`}
+                    >
+                      {item === "quick" ? "Rapido" : "Profundo"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-white/55">
+                  {liveMode
+                    ? "O mentor atualiza automaticamente ao alterar briefing, foco ou screenshot."
+                    : "Use o botao de analise para gerar diagnosticos sob demanda."}
+                </p>
+              </div>
+
               <div className="space-y-3">
                 <p className="text-xs uppercase tracking-[0.32em] text-white/60">Screenshot</p>
                 <div className="flex flex-wrap items-center gap-3">
@@ -387,14 +606,14 @@ export default function AssistenteSite() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!canSubmit || isLoading}
-                  className="rounded-full border border-purple-300/60 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-white shadow-[0_18px_40px_rgba(168,85,247,0.35)] transition hover:brightness-[1.08] disabled:opacity-50"
-                >
-                  {isLoading ? "Gerando..." : "Pedir sugestoes"}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!canSubmit || isLoading}
+                    className="rounded-full border border-purple-300/60 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-white shadow-[0_18px_40px_rgba(168,85,247,0.35)] transition hover:brightness-[1.08] disabled:opacity-50"
+                  >
+                    {isLoading ? "Analisando..." : "Analisar layout"}
+                  </button>
                 <button
                   type="button"
                   onClick={handleCopyBrief}
@@ -423,7 +642,7 @@ export default function AssistenteSite() {
 
             <div className="space-y-4 rounded-3xl border border-purple-300/20 bg-black/50 p-6 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
               <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.32em] text-white/60">
-                <span>Sugestoes da Merse</span>
+                <span>Diagnostico do Mentor</span>
                 <button
                   type="button"
                   onClick={handleCopyResult}
@@ -434,26 +653,54 @@ export default function AssistenteSite() {
                 </button>
               </div>
 
+              {result && (
+                <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
+                    Provedor: {result.provider ?? "openai"}
+                  </span>
+                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
+                    Modo: {result.mode === "quick" ? "Rapido" : "Profundo"}
+                  </span>
+                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
+                    {result.latencyMs ? `${Math.round(result.latencyMs)}ms` : "latencia n/a"}
+                  </span>
+                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
+                    Atualizado:{" "}
+                    {lastUpdated
+                      ? new Intl.DateTimeFormat("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }).format(new Date(lastUpdated))
+                      : "agora"}
+                  </span>
+                </div>
+              )}
+
               {!result && !isLoading && (
                 <div className="space-y-3 text-sm text-white/70">
                   <p>Envie o contexto ou screenshot e receba:</p>
                   <ul className="space-y-2">
                     <li className="rounded-xl border border-purple-300/20 bg-black/40 px-3 py-2">
-                      Ajustes de hierarquia e ritmo visual
+                      Diagnostico de layout, contraste e hierarquia visual
                     </li>
                     <li className="rounded-xl border border-purple-300/20 bg-black/40 px-3 py-2">
-                      Direcao de tipografia e contraste
+                      Acoes praticas para CTA, tipografia e mobile
                     </li>
                     <li className="rounded-xl border border-purple-300/20 bg-black/40 px-3 py-2">
-                      Ideias de CTA e layout mobile-first
+                      Roadmap priorizado para melhorias rapidas
                     </li>
                   </ul>
                 </div>
               )}
-              {isLoading && <p className="text-sm text-white/80">Analisando seu layout...</p>}
+              {isLoading && (
+                <p className="text-sm text-white/80">
+                  {liveMode ? "Analisando em tempo real..." : "Analisando seu layout..."}
+                </p>
+              )}
               {result && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <p className="text-lg font-semibold text-white">{result.headline}</p>
+
                   <ul className="space-y-2 text-sm text-white/80">
                     {result.suggestions.map((sug, idx) => (
                       <li key={idx} className="rounded-xl border border-purple-300/20 bg-white/5 px-3 py-2">
@@ -461,6 +708,86 @@ export default function AssistenteSite() {
                       </li>
                     ))}
                   </ul>
+
+                  {analysisCards.length > 0 && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {analysisCards.map((card) => (
+                        <article
+                          key={card.key}
+                          className="space-y-3 rounded-2xl border border-white/10 bg-black/40 p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs uppercase tracking-[0.3em] text-white/60">{card.title}</p>
+                            <span className="text-xs font-semibold text-white">
+                              {card.data.score} · {getScoreLabel(card.data.score)}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-rose-400 via-fuchsia-400 to-cyan-400"
+                              style={{ width: `${card.data.score}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-white/70">{card.data.diagnosis}</p>
+                          <ul className="space-y-1 text-xs text-white/75">
+                            {card.data.actions.slice(0, 2).map((action) => (
+                              <li key={action}>• {action}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  {result.quickWins && result.quickWins.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/55">Quick wins</p>
+                      <ul className="space-y-2 text-sm text-white/80">
+                        {result.quickWins.map((item) => (
+                          <li
+                            key={item}
+                            className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-3 py-2"
+                          >
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {result.roadmap && result.roadmap.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/55">
+                        Roadmap de execucao
+                      </p>
+                      <div className="space-y-2">
+                        {result.roadmap.map((item, index) => (
+                          <div
+                            key={`${item.task}-${index}`}
+                            className="rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm"
+                          >
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-white">{item.task}</p>
+                              <span
+                                className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.25em] ${
+                                  item.priority === "alta"
+                                    ? "border border-rose-300/40 bg-rose-500/15 text-rose-200"
+                                    : item.priority === "media"
+                                    ? "border border-amber-300/40 bg-amber-500/15 text-amber-200"
+                                    : "border border-emerald-300/40 bg-emerald-500/15 text-emerald-200"
+                                }`}
+                              >
+                                {item.priority}
+                              </span>
+                            </div>
+                            <p className="text-xs text-white/65">Impacto: {item.impact}</p>
+                            <p className="text-xs text-white/50">Esforco: {item.effort}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {result.callouts && result.callouts.length > 0 && (
                     <div className="grid grid-cols-2 gap-2 text-[11px] uppercase tracking-[0.28em] text-white/70">
                       {result.callouts.map((item) => (

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "image": {
+    "siteUrl": "https://merse.app.br/",
+    "api": {
+      "baseUrl": "",
+      "apiKeyEnv": "MERSE_IMAGE_API_KEY"
+    },
+    "replicate": {
+      "tokenEnv": "REPLICATE_FLUX_API_TOKEN",
+      "model": "black-forest-labs/flux-schnell",
+      "inputTemplate": {
+        "prompt": "{{prompt}}"
+      }
+    },
+    "terminalCommand": "echo \"Configure merse-generators.json para gerar imagem: {{prompt}} (saida: {{out}})\""
+  },
+  "video": {
+    "siteUrl": "https://merse.app.br/",
+    "api": {
+      "baseUrl": "",
+      "apiKeyEnv": "MERSE_VIDEO_API_KEY"
+    },
+    "replicate": {
+      "tokenEnv": "REPLICATE_VEO_API_TOKEN",
+      "model": "",
+      "inputTemplate": {
+        "prompt": "{{prompt}}"
+      }
+    },
+    "terminalCommand": "echo \"Configure merse-generators.json para gerar video: {{prompt}} (saida: {{out}})\""
+  }
+}

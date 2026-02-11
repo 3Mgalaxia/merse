@@ -322,15 +322,25 @@ export default function GerarVideo() {
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.2),transparent_60%),radial-gradient(circle_at_bottom,rgba(236,72,153,0.22),transparent_70%)]" />
       <div className="pointer-events-none absolute inset-x-0 top-20 -z-10 h-[460px] bg-[radial-gradient(circle_at_30%_30%,rgba(129,140,248,0.32),transparent_60%),radial-gradient(circle_at_70%_40%,rgba(236,72,153,0.28),transparent_60%)] blur-3xl opacity-80" />
 
-      <Link
-        href="/gerar"
-        className="absolute right-6 top-28 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-white/70 transition hover:border-white/50 hover:bg-white/20 hover:text-white"
-        aria-label="Voltar para o hub de geração"
-      >
-        VOLTAR
-      </Link>
+      <div className="absolute right-6 top-28 z-10 flex items-center gap-3">
+        <Link
+          href="/gerar"
+          className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-white/70 transition hover:border-white/50 hover:bg-white/20 hover:text-white"
+          aria-label="Voltar para o hub de geração"
+        >
+          VOLTAR
+        </Link>
+      </div>
 
-      <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,420px)_1fr]">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key="video-generator-mode"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -14 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,420px)_1fr]"
+        >
         <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.06] p-8 backdrop-blur-2xl shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.12)_0%,transparent_45%),radial-gradient(circle_at_top,rgba(79,70,229,0.28),transparent_55%)] opacity-90" />
           <div className="relative flex flex-col gap-6">
@@ -643,8 +653,10 @@ export default function GerarVideo() {
               </div>
             )}
           </div>
+
         </section>
-      </div>
+      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

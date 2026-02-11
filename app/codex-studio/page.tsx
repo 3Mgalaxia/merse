@@ -9,7 +9,12 @@ import { EnergyProvider, useEnergy } from "@/contexts/EnergyContext";
 import CodexEditor from "./CodexEditor";
 import CodexSidebar from "./CodexSidebar";
 import CodexPreview from "./CodexPreview";
-import { callCodexEdit, consumeCodexCredits } from "./api";
+import {
+  callCodexEdit,
+  consumeCodexCredits,
+  type CodexMode,
+  type CodexProviderHint,
+} from "./api";
 import "./style.css";
 
 type CommandHistoryItem = {
@@ -2322,6 +2327,23 @@ const CREDIT_FORMATTER = new Intl.NumberFormat("pt-BR");
 const formatCredits = (value: number | null | undefined) =>
   CREDIT_FORMATTER.format(Math.max(0, Math.round(value ?? 0)));
 
+const MODE_LABEL: Record<CodexMode, string> = {
+  edit: "Editar",
+  refactor: "Refatorar",
+  beautify: "Beautify",
+};
+
+const ENGINE_LABEL: Record<CodexProviderHint, string> = {
+  auto: "Auto",
+  merse: "Merse",
+  openai: "OpenAI",
+};
+
+const APPLIED_PROVIDER_LABEL: Record<"merse-codex" | "openai", string> = {
+  "merse-codex": "Merse Codex",
+  openai: "OpenAI",
+};
+
 function BackLink() {
   return (
     <Link href="/gerar" className="codex-back-link">
@@ -2338,12 +2360,15 @@ function CodexStudioContent() {
   const [html, setHtml] = useState<string>(DEFAULT_HTML);
   const [previewHtml, setPreviewHtml] = useState<string>(DEFAULT_HTML);
   const [comando, setComando] = useState("");
+  const [providerHint, setProviderHint] = useState<CodexProviderHint>("auto");
+  const [mode, setMode] = useState<CodexMode>("edit");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<StatusState>(null);
   const [history, setHistory] = useState<CommandHistoryItem[]>([]);
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
   const [creditsSnapshot, setCreditsSnapshot] = useState(remaining);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const [lastProvider, setLastProvider] = useState<"merse-codex" | "openai" | null>(null);
 
   useEffect(() => {
     setCreditsSnapshot(remaining);
@@ -2355,6 +2380,7 @@ function CodexStudioContent() {
       "Adicionar sessão de depoimentos com cards em carrossel",
       "Aplicar gradiente Merse roxo/azul no fundo e tipografia Space Grotesk",
       "Incluir footer escuro com links e ícones sociais",
+      "Refatorar o código para facilitar manutenção sem mudar comportamento",
     ],
     [],
   );
@@ -2366,7 +2392,7 @@ function CodexStudioContent() {
       return;
     }
     setLoading(true);
-    setStatus({ message: "Reservando energia cósmica...", tone: "info" });
+    setStatus({ message: `Reservando energia cósmica para ${MODE_LABEL[mode].toLowerCase()}...`, tone: "info" });
 
     let latestCredits: number | null = null;
 
@@ -2376,13 +2402,26 @@ function CodexStudioContent() {
       const creditsLabel = formatCredits(latestCredits);
       setStatus({ message: `⚡ ${creditsLabel} créditos restantes`, tone: "info" });
 
-      const data = await callCodexEdit({ html, comando: trimmedCommand });
+      const data = await callCodexEdit({
+        html,
+        comando: trimmedCommand,
+        provider: providerHint,
+        mode,
+      });
       const updatedHtml = data.htmlAtualizado ?? data.html ?? html;
+      const appliedProvider =
+        data.provider ?? (providerHint === "openai" ? "openai" : "merse-codex");
+      const providerLabel = APPLIED_PROVIDER_LABEL[appliedProvider];
+      const fallbackNote = data.fallbackUsed ? " (fallback automático)" : "";
+      setLastProvider(appliedProvider);
       setHtml(updatedHtml);
       setPreviewHtml(updatedHtml);
       setHistory((prev) => [{ command: trimmedCommand, executedAt: new Date().toISOString() }, ...prev].slice(0, 8));
       const successLabel = creditsLabel;
-      setStatus({ message: `Blueprint atualizado • ⚡ ${successLabel} créditos`, tone: "success" });
+      setStatus({
+        message: `${MODE_LABEL[data.mode ?? mode]} via ${providerLabel}${fallbackNote} • ⚡ ${successLabel} créditos`,
+        tone: "success",
+      });
     } catch (error) {
       const reason = (error as { reason?: string })?.reason;
       if (reason === "NO_PLAN" || reason === "NO_CREDITS") {
@@ -2405,6 +2444,8 @@ function CodexStudioContent() {
 
   const insights = [
     "Combine comandos curtos e diretos para ajustes precisos.",
+    "Use modo Refatorar para limpar a estrutura sem perder layout.",
+    "No motor Auto, o sistema tenta Merse e usa OpenAI como fallback.",
     "Reaproveite o histórico para iterar sem perder contexto.",
     "Copy/paste o HTML final direto no laboratório de sites.",
   ];
@@ -2415,6 +2456,9 @@ function CodexStudioContent() {
   const missionLog = history.slice(0, 4);
 
   const heroStats = [
+    { label: "Motor", value: ENGINE_LABEL[providerHint] },
+    { label: "Modo", value: MODE_LABEL[mode] },
+    { label: "Último provedor", value: lastProvider ? APPLIED_PROVIDER_LABEL[lastProvider] : "N/A" },
     { label: "Modo ativo", value: viewMode === "desktop" ? "Desktop" : "Mobile" },
     { label: "Comandos nesta sessão", value: history.length },
     { label: "Status", value: status?.message ?? "Pronto para lançar." },
@@ -2595,6 +2639,10 @@ function CodexStudioContent() {
               <CodexSidebar
                 comando={comando}
                 setComando={setComando}
+                provider={providerHint}
+                setProvider={setProviderHint}
+                mode={mode}
+                setMode={setMode}
                 loading={loading}
                 onExecute={executarComando}
                 status={status}
@@ -2637,6 +2685,10 @@ function CodexStudioContent() {
                   <li>
                     <span>Status atual</span>
                     <p>{status?.message ?? "Pronto para editar."}</p>
+                  </li>
+                  <li>
+                    <span>Provedor aplicado</span>
+                    <p>{lastProvider ? APPLIED_PROVIDER_LABEL[lastProvider] : "Sem execução"}</p>
                   </li>
                 </ul>
               </div>

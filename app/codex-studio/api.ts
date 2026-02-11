@@ -1,8 +1,23 @@
 import { firebaseAuth } from "@/lib/firebase";
 
+export type CodexProviderHint = "auto" | "merse" | "openai";
+export type CodexMode = "edit" | "refactor" | "beautify";
+
 type CodexPayload = {
   html: string;
   comando: string;
+  provider?: CodexProviderHint;
+  mode?: CodexMode;
+};
+
+export type CodexEditResponse = {
+  htmlAtualizado?: string;
+  html?: string;
+  provider?: "merse-codex" | "openai";
+  mode?: CodexMode;
+  providersTried?: string[];
+  fallbackUsed?: boolean;
+  logs?: string;
 };
 
 type ConsumeResponse = {
@@ -13,13 +28,13 @@ type ConsumeResponse = {
 
 type ConsumeError = Error & { reason?: string };
 
-export async function callCodexEdit({ html, comando }: CodexPayload) {
+export async function callCodexEdit({ html, comando, provider, mode }: CodexPayload) {
   const response = await fetch("/api/codex/edit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ html, comando }),
+    body: JSON.stringify({ html, comando, provider, mode }),
   });
 
   const data = await response.json().catch(() => null);
@@ -31,7 +46,7 @@ export async function callCodexEdit({ html, comando }: CodexPayload) {
     throw new Error(message);
   }
 
-  return data as { htmlAtualizado?: string; html?: string };
+  return data as CodexEditResponse;
 }
 
 export async function consumeCodexCredits({ html, length }: { html: string; length?: number }) {
