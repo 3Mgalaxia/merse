@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import OpenAI from "openai";
+import { isR2Enabled, uploadBufferToR2 } from "@/server/storage/r2";
 
 const execFileAsync = promisify(execFile);
 
@@ -860,14 +861,12 @@ async function mergeVideosWithFfmpeg(videoUrls: string[]) {
 
   const mergeId = crypto.randomUUID();
   const tempDir = path.join(os.tmpdir(), `mersee-corporate-${mergeId}`);
-  const publicDir = path.join(process.cwd(), "public", "generated-corporate");
   const outputName = `corporate-${Date.now()}-${mergeId.slice(0, 8)}.mp4`;
-  const outputPath = path.join(publicDir, outputName);
+  const outputPath = path.join(tempDir, outputName);
   const listPath = path.join(tempDir, "segments.txt");
 
   try {
     await fs.mkdir(tempDir, { recursive: true });
-    await fs.mkdir(publicDir, { recursive: true });
 
     const localSegments: string[] = [];
     for (let index = 0; index < videoUrls.length; index += 1) {
@@ -922,10 +921,27 @@ async function mergeVideosWithFfmpeg(videoUrls: string[]) {
       ]);
     }
 
+    if (isR2Enabled()) {
+      const mergedBuffer = await fs.readFile(outputPath);
+      const uploadedUrl = await uploadBufferToR2({
+        buffer: mergedBuffer,
+        contentType: "video/mp4",
+        key: `generated-corporate/${outputName}`,
+      });
+      if (uploadedUrl) {
+        return {
+          merged: true,
+          mergedUrl: uploadedUrl,
+          mergeError: undefined as string | undefined,
+        };
+      }
+    }
+
     return {
-      merged: true,
-      mergedUrl: `/generated-corporate/${outputName}`,
-      mergeError: undefined as string | undefined,
+      merged: false,
+      mergedUrl: videoUrls[0] ?? "",
+      mergeError:
+        "Mesclagem local concluída, mas sem destino persistente. Configure R2 para salvar o vídeo final.",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao concatenar vídeos.";
@@ -936,17 +952,6 @@ async function mergeVideosWithFfmpeg(videoUrls: string[]) {
     };
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => void 0);
-  }
-}
-
-async function mergedOutputExists(mergedUrl?: string) {
-  if (!mergedUrl || !mergedUrl.startsWith("/generated-corporate/")) return false;
-  const absolute = path.join(process.cwd(), "public", mergedUrl.replace(/^\//, ""));
-  try {
-    await fs.access(absolute);
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -1438,10 +1443,9 @@ async function generateVideoInSegments(params: {
   }
 
   const providerSummary = Array.from(new Set(segments.map((segment) => segment.provider))).join(",");
-  let merged =
-    cache.mergedUrl && (await mergedOutputExists(cache.mergedUrl))
-      ? { merged: true, mergedUrl: cache.mergedUrl, mergeError: undefined as string | undefined }
-      : await mergeVideosWithFfmpeg(segments.map((segment) => segment.videoUrl));
+  let merged = cache.mergedUrl
+    ? { merged: true, mergedUrl: cache.mergedUrl, mergeError: undefined as string | undefined }
+    : await mergeVideosWithFfmpeg(segments.map((segment) => segment.videoUrl));
 
   if (merged.merged && merged.mergedUrl) {
     cache.mergedUrl = merged.mergedUrl;
