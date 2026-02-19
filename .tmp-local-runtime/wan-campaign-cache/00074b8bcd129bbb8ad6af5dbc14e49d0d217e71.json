@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "key": "00074b8bcd129bbb8ad6af5dbc14e49d0d217e71",
+  "createdAt": 1770863664152,
+  "updatedAt": 1770866671301,
+  "segmentDurations": [
+    15,
+    15
+  ],
+  "segmentPrompts": [
+    "Prompt para Segmento 1 (15s): A câmera voa através de um magnífico campo de estrelas, revelando o nome 'Merse Labs' em letras brilhantes. A narração inicia: 'No vasto universo da tecnologia, surge uma nova estrela...' A atmosfera é de mistério e descoberta, criando uma conexão inicial com o espectador.",
+    "Prompt para Segmento 2 (15s): Corte para uma animação onde um cliente interage com a IA Merse em um dispositivo holográfico. Gráficos de crescimento surgem, enquanto a narração diz: 'Com a IA Merse, você transforma dados em decisões, alcançando resultados extraordinários.' O foco na expressão de satisfação do cliente estabelece a importância da tecnologia."
+  ],
+  "segments": [
+    {
+      "index": 1,
+      "duration": 15,
+      "videoUrl": "https://replicate.delivery/xezq/NGyArhgbIXqFE1P3Yy1PqgdhGAMCP9C2ZP19ERce10pJxXDLA/tmp80zjtx6j.mp4",
+      "provider": "wan"
+    },
+    {
+      "index": 2,
+      "duration": 15,
+      "videoUrl": "https://replicate.delivery/xezq/5YRAuWfJppT2XKQ25h9cFRNS4PapwBN8ffCYQU4rppNRPfaYB/tmp7at0yj5g.mp4",
+      "provider": "wan"
+    }
+  ],
+  "pendingPredictions": [],
+  "mergedUrl": "/generated-corporate/corporate-1770866666019-2eae239d.mp4"
+}

@@ -10,6 +10,15 @@ import { SiteBuildProgress } from "@/components/site/SiteBuildProgress";
 
 type SiteMode = "site-generator" | "image-generator";
 
+type TemplateEditResponse = {
+  runId?: string;
+  outputDir?: string;
+  summary?: string;
+  updatedFiles?: string[];
+  previewCode?: string;
+  downloadUrl?: string | null;
+};
+
 export default function SiteIa(): JSX.Element {
   const { user } = useAuth();
   const [mode, setMode] = useState<SiteMode>("site-generator");
@@ -29,6 +38,11 @@ export default function SiteIa(): JSX.Element {
   const [resultLink, setResultLink] = useState<string | null>(null);
   const [projectZip, setProjectZip] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [templateRunId, setTemplateRunId] = useState<string | null>(null);
+  const [templateSummary, setTemplateSummary] = useState<string | null>(null);
+  const [templateOutputDir, setTemplateOutputDir] = useState<string | null>(null);
+  const [templateUpdatedFiles, setTemplateUpdatedFiles] = useState<string[]>([]);
+  const [templateDownloadUrl, setTemplateDownloadUrl] = useState<string | null>(null);
   const [brandColors, setBrandColors] = useState<string>("azul, roxo");
   const [tone, setTone] = useState<string>("futurista");
   const [blueprintPages, setBlueprintPages] = useState<SitePage[]>([]);
@@ -130,6 +144,69 @@ export default function SiteIa(): JSX.Element {
       await handleGenerate(data.projectId);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha ao preparar blueprint.");
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!brief.trim()) {
+      setStatus("Descreva o briefing para personalizar o merse-template.");
+      return;
+    }
+
+    setIsPreparing(true);
+    setStatus("Clonando merse-template e aplicando melhorias com OpenAI...");
+    setPreviewHtml(null);
+    setTemplateRunId(null);
+    setTemplateSummary(null);
+    setTemplateOutputDir(null);
+    setTemplateUpdatedFiles([]);
+    setTemplateDownloadUrl(null);
+
+    try {
+      const response = await fetch("/api/site/template-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: buildPrompt(),
+          projectName,
+          mode,
+          tone,
+          brandColors,
+          features,
+        }),
+      });
+      const data = (await response.json()) as TemplateEditResponse & { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Não foi possível editar o merse-template agora.");
+      }
+
+      const outputDir = typeof data.outputDir === "string" ? data.outputDir : "";
+      const summary = typeof data.summary === "string" ? data.summary : "Template atualizado com sucesso.";
+      const updatedFiles = Array.isArray(data.updatedFiles)
+        ? data.updatedFiles.filter((file): file is string => typeof file === "string" && file.trim().length > 0)
+        : [];
+
+      if (outputDir) {
+        setLocalPath(outputDir);
+        setTemplateOutputDir(outputDir);
+      }
+      setTemplateSummary(summary);
+      setTemplateUpdatedFiles(updatedFiles);
+      setTemplateRunId(typeof data.runId === "string" ? data.runId : null);
+      if (typeof data.downloadUrl === "string" && data.downloadUrl.trim()) {
+        setTemplateDownloadUrl(data.downloadUrl.trim());
+      } else if (typeof data.runId === "string" && data.runId.trim()) {
+        setTemplateDownloadUrl(`/api/site/template-download?runId=${encodeURIComponent(data.runId.trim())}`);
+      }
+      if (typeof data.previewCode === "string" && data.previewCode.trim()) {
+        setPreviewHtml(data.previewCode.trim());
+      }
+
+      setStatus("Template pronto. Revise o código no preview e abra a pasta no VS Code para continuar.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Falha ao personalizar o template.");
     } finally {
       setIsPreparing(false);
     }
@@ -369,22 +446,30 @@ export default function SiteIa(): JSX.Element {
 
               <button
                 type="button"
-                onClick={handlePrepareBlueprint}
+                onClick={handleApplyTemplate}
                 disabled={isPreparing}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-blue-400/60 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-700 px-6 py-3 text-xs font-semibold uppercase tracking-[0.35em] text-white shadow-[0_18px_45px_rgba(59,130,246,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <PiSparkleFill className="text-lg" />
-                {isPreparing ? "Gerando blueprint..." : "Preparar blueprint (IA Merse)"}
+                {isPreparing ? "Editando template..." : "Aplicar IA no merse-template"}
+              </button>
+              <button
+                type="button"
+                onClick={handlePrepareBlueprint}
+                disabled={isPreparing}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/80 transition hover:border-white/45 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Usar fluxo legado (blueprint + assets)
               </button>
 
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-sm text-white/70">
                 <p className="text-xs uppercase tracking-[0.35em] text-white/50">Como vamos gerar</p>
                 <ul className="mt-3 space-y-2 text-white/70">
-                  <li>1) Interpretamos o prompt e detectamos se é tema de IA.</li>
-                  <li>2) Se for IA → usamos a API Merse de site; se não, fallback padrão.</li>
-                  <li>3) Geramos index.html, style.css, script.js (ou Next.js se preferir).</li>
-                  <li>4) Empacotamos em .zip para baixar.</li>
-                  <li>5) Se estiver no desktop: abrimos VS Code + extensão Merse com aviso “Projeto Gerado pela Merse”.</li>
+                  <li>1) Clonamos o `merse-template` para uma pasta de saída versionada.</li>
+                  <li>2) A OpenAI analisa briefing, tom, cores e módulos selecionados.</li>
+                  <li>3) Reescrevemos os arquivos centrais do template mantendo stack Next.js.</li>
+                  <li>4) Mostramos preview do código gerado e lista de arquivos alterados.</li>
+                  <li>5) Você abre direto no VS Code para continuar iterando com o Codex.</li>
                 </ul>
               </div>
 
@@ -424,8 +509,8 @@ export default function SiteIa(): JSX.Element {
               </div>
               <div className="h-[360px] rounded-2xl border border-white/10 bg-gradient-to-br from-blue-950/70 via-black/60 to-black/90 p-4 text-sm text-white/60 shadow-inner">
                 <p className="text-white/70">
-                  Aqui aparecerá o preview gerado. Adicione seu briefing, cores e tom e clique em “Preparar blueprint”
-                  para ver a estrutura sugerida.
+                  Aqui aparecerá o preview gerado. Adicione seu briefing, cores e tom e clique em “Aplicar IA no
+                  merse-template” para ver o código personalizado.
                 </p>
                 <ProgressBar status={projectStatus} progress={projectProgress} step={projectStep} />
                 {status && (
@@ -449,9 +534,43 @@ export default function SiteIa(): JSX.Element {
                     )}
                   </div>
                 )}
+                {templateOutputDir && (
+                  <div className="mt-3 rounded-xl border border-blue-400/25 bg-blue-500/10 p-3 text-[12px] text-white/85">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-blue-200/80">
+                      Template atualizado
+                    </p>
+                    {templateSummary ? <p className="mt-2 text-sm text-white/85">{templateSummary}</p> : null}
+                    <p className="mt-2 text-white/80">
+                      Pasta de saída: <code className="rounded bg-black/30 px-1 py-0.5">{templateOutputDir}</code>
+                    </p>
+                    {templateRunId ? (
+                      <p className="mt-1 text-[11px] text-white/60">Execução: {templateRunId}</p>
+                    ) : null}
+                    {templateDownloadUrl ? (
+                      <div className="mt-3">
+                        <a
+                          href={templateDownloadUrl}
+                          className="inline-flex items-center justify-center rounded-full border border-emerald-300/50 bg-emerald-500/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-100 transition hover:border-emerald-200 hover:bg-emerald-400/25"
+                        >
+                          Baixar projeto (.zip)
+                        </a>
+                      </div>
+                    ) : null}
+                    {templateUpdatedFiles.length > 0 ? (
+                      <div className="mt-2">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-white/60">Arquivos editados</p>
+                        <ul className="mt-1 space-y-1 text-white/80">
+                          {templateUpdatedFiles.map((file) => (
+                            <li key={file}>• {file}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 {previewHtml && (
                   <div className="mt-3 rounded-xl border border-white/10 bg-black/40 p-3 text-[11px] text-white/70">
-                    <p className="mb-2 uppercase tracking-[0.3em] text-white/50">Preview HTML</p>
+                    <p className="mb-2 uppercase tracking-[0.3em] text-white/50">Preview de código</p>
                     <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-white/70">
                       {previewHtml}
                     </pre>

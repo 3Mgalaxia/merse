@@ -300,22 +300,71 @@ function normalizeDownloadType(url: string, fallbackKey?: string) {
 function collectDownloadUrls(payload: unknown) {
   const items: DownloadItem[] = [];
 
+  const looksLikeModelKey = (key?: string) => {
+    const lowered = (key ?? "").toLowerCase();
+    return (
+      lowered.includes("model") ||
+      lowered.includes("mesh") ||
+      lowered.includes("geometry") ||
+      lowered.includes("glb") ||
+      lowered.includes("gltf") ||
+      lowered.includes("obj") ||
+      lowered.includes("usdz") ||
+      lowered.includes("fbx") ||
+      lowered.includes("stl")
+    );
+  };
+
   const append = (url: string, key?: string) => {
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
-    if (!MODEL_URL_EXTENSIONS.test(url) && !(key ?? "").toLowerCase().includes("model")) return;
+    if (!MODEL_URL_EXTENSIONS.test(url) && !looksLikeModelKey(key)) return;
     items.push({ type: normalizeDownloadType(url, key), url });
   };
 
   if (payload && typeof payload === "object") {
-    const directModelUrls =
-      (payload as any).model_urls ??
-      (payload as any).modelUrls ??
-      (payload as any).downloads ??
-      (payload as any).files;
+    const candidate = payload as any;
+    const directModelUrls = candidate.model_urls ?? candidate.modelUrls ?? candidate.downloads ?? candidate.files;
 
-    if (directModelUrls && typeof directModelUrls === "object") {
+    if (Array.isArray(directModelUrls)) {
+      for (const value of directModelUrls) {
+        if (typeof value === "string") append(value, "model_urls");
+        if (value && typeof value === "object" && typeof (value as any).url === "string") {
+          append((value as any).url, "model_urls");
+        }
+      }
+    } else if (directModelUrls && typeof directModelUrls === "object") {
       for (const [k, value] of Object.entries(directModelUrls as Record<string, unknown>)) {
         if (typeof value === "string") append(value, k);
+        if (value && typeof value === "object" && typeof (value as any).url === "string") {
+          append((value as any).url, k);
+        }
+      }
+    }
+
+    const directKeys = [
+      "model_mesh",
+      "modelMesh",
+      "mesh",
+      "mesh_url",
+      "meshUrl",
+      "model",
+      "model_url",
+      "modelUrl",
+      "glb",
+      "gltf",
+      "obj",
+      "usdz",
+      "fbx",
+      "stl",
+      "geometry",
+      "geometry_url",
+      "geometryUrl",
+    ];
+    for (const key of directKeys) {
+      const value = candidate[key];
+      if (typeof value === "string") append(value, key);
+      if (value && typeof value === "object" && typeof (value as any).url === "string") {
+        append((value as any).url, key);
       }
     }
   }
@@ -729,32 +778,54 @@ async function runReplicate3DProvider(params: {
     process.env.REPLICATE_3D_MODEL ??
     "hyper3d/rodin"
   ).trim();
+  // NOTE: Do NOT fall back to MERSE_3D_MODEL_VERSION here. That env is used by the separate Merse 3D API
+  // and can accidentally point Replicate to a completely different model version (often returning 2D images).
   const preferredVersion =
-    process.env.REPLICATE_OBJECT_3D_MODEL_VERSION ??
-    process.env.REPLICATE_3D_MODEL_VERSION ??
-    process.env.MERSE_3D_MODEL_VERSION;
+    process.env.REPLICATE_OBJECT_3D_MODEL_VERSION ?? process.env.REPLICATE_3D_MODEL_VERSION;
   const version = await ensureReplicateVersion(token, model, preferredVersion);
   const reference = params.productReferenceUrl ?? params.productReferenceRaw;
 
-  const qualityHint =
-    params.detail >= 85 ? "ultra detail" : params.detail >= 65 ? "high detail" : "fast preview";
-  const promptWithHint = `${params.prompt} ${qualityHint}.`;
+  const quality =
+    params.detail >= 85 ? "high" : params.detail >= 65 ? "medium" : params.detail >= 45 ? "low" : "extra-low";
+  const promptWithHint = `${params.prompt}`.trim();
 
   const inputVariants: Array<Record<string, unknown>> = [];
   if (reference) {
+    // Hyper3D/Rodin-style schema (commonly used by text/image-to-3D wrappers).
     inputVariants.push({
       prompt: promptWithHint,
+      input_image_urls: [reference],
+      geometry_file_format: "glb",
+      material: "PBR",
+      quality,
+      tier: "Regular",
+    });
+    inputVariants.push({
+      // Some implementations accept a single string instead of list<string>.
+      prompt: promptWithHint,
+      input_image_urls: reference,
+      geometry_file_format: "glb",
+      material: "PBR",
+      quality,
+      tier: "Regular",
+    });
+    inputVariants.push({
+      // Legacy guesses (keep for compatibility with other 3D models).
+      prompt: promptWithHint,
       image: reference,
-      logo_image: params.brandReferenceUrl,
     });
     inputVariants.push({
       prompt: promptWithHint,
       reference_image: reference,
-      logo_image: params.brandReferenceUrl,
     });
   }
   inputVariants.push({
+    // Text-to-3D variant (no images).
     prompt: promptWithHint,
+    geometry_file_format: "glb",
+    material: "PBR",
+    quality,
+    tier: "Regular",
   });
 
   let lastError: unknown = null;
@@ -906,6 +977,7 @@ export default async function handler(
   const providersTried: string[] = [];
   const providerErrors: string[] = [];
   let accumulatedDownloads: DownloadItem[] = [];
+  let fallbackResult: ProviderResult | null = null;
 
   const attempts: Array<{ key: string; run: () => Promise<ProviderResult> }> = [
     {
@@ -954,6 +1026,12 @@ export default async function handler(
   ];
 
   for (const attempt of attempts) {
+    // Avoid spending extra on 2D-only fallback if we already have a preview render
+    // and haven't obtained any 3D downloads so far.
+    if (attempt.key === "openai-render" && fallbackResult && accumulatedDownloads.length === 0) {
+      break;
+    }
+
     providersTried.push(attempt.key);
 
     try {
@@ -964,12 +1042,18 @@ export default async function handler(
       }));
       accumulatedDownloads = mergeDownloads(accumulatedDownloads, taggedDownloads);
 
-      if (result.renders.length > 0) {
+      if (!fallbackResult && result.renders.length > 0) {
+        fallbackResult = result;
+      }
+
+      // Success for this endpoint is returning at least one 3D asset download. If a provider
+      // only returns preview renders, keep trying the next provider until we find a 3D file.
+      if (accumulatedDownloads.length > 0) {
         return res.status(200).json({
           provider: result.provider,
           providersTried,
-          renders: result.renders,
-          downloads: accumulatedDownloads.length ? accumulatedDownloads : undefined,
+          renders: result.renders.length > 0 ? result.renders : fallbackResult?.renders ?? [],
+          downloads: accumulatedDownloads,
           notes: [...sharedNotes, ...(result.notes ?? [])],
         });
       }
@@ -977,6 +1061,20 @@ export default async function handler(
       const message = toErrorMessage(error, `Falha no provedor ${attempt.key}.`);
       providerErrors.push(`${attempt.key}: ${message}`);
     }
+  }
+
+  if (fallbackResult?.renders?.length) {
+    return res.status(200).json({
+      provider: fallbackResult.provider,
+      providersTried,
+      renders: fallbackResult.renders,
+      downloads: accumulatedDownloads.length ? accumulatedDownloads : undefined,
+      notes: [
+        ...sharedNotes,
+        ...(fallbackResult.notes ?? []),
+        "Somente renders de preview foram gerados; nenhum arquivo 3D foi retornado pelos provedores.",
+      ],
+    });
   }
 
   return res.status(500).json({

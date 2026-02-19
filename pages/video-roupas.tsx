@@ -169,12 +169,14 @@ export default function VideoRoupas() {
         duration: data.duration ?? duration,
         fabric: data.fabric ?? fabric,
       });
+      // Nao bloqueie a UX aguardando persistencia em background (Firebase/localStorage).
+      setIsLoading(false);
       energy.registerUsage(COST_PER_RENDER);
 
       const cameraLabel =
         CAM_ANGLES.find((angle) => angle.id === cameraAngle)?.label ?? cameraAngle;
       const timestamp = new Date().toISOString();
-      await appendUserCreations(
+      void appendUserCreations(
         userKey,
         [
           {
@@ -193,7 +195,9 @@ export default function VideoRoupas() {
           },
         ],
         { userId: user?.uid },
-      );
+      ).catch((persistError) => {
+        console.warn("[video-roupas] Falha ao salvar criacao:", persistError);
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Geração cancelada.");

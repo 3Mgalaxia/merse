@@ -159,9 +159,11 @@ export default function TrocarGeneros() {
       }
 
       setResultImage(data.imageUrl);
+      // Nao bloqueie o fim do loader aguardando persistencia em background (Firebase/localStorage).
+      setIsLoading(false);
       energy.registerUsage(COST_PER_TRANSFORM);
 
-      await appendUserCreations(
+      void appendUserCreations(
         userKey,
         [
           {
@@ -178,7 +180,9 @@ export default function TrocarGeneros() {
           },
         ],
         { userId: user?.uid },
-      );
+      ).catch((persistError) => {
+        console.warn("[trocar-generos] Falha ao salvar criacao:", persistError);
+      });
 
       const newEntry: Transformation = {
         id: `history-${Date.now()}`,

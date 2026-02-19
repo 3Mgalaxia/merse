@@ -7,7 +7,7 @@ export type PlanConfig = {
 };
 
 export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
-  free: { key: "free", name: "Free Orbit", limit: 300 },
+  free: { key: "free", name: "Orbit", limit: 300 },
   pulse: { key: "pulse", name: "Pulse Starter", limit: 900 },
   nebula: { key: "nebula", name: "Nebula Studio", limit: 5000 },
   supernova: { key: "supernova", name: "Supernova Pro", limit: 10000 },

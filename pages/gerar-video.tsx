@@ -263,10 +263,12 @@ export default function GerarVideo() {
         provider: provider.id,
         aspectId: aspect.id,
       });
+      // Nao bloqueie o fim do loader aguardando persistencia em background (Firebase/localStorage).
+      setIsLoading(false);
       energy.registerUsage(provider.cost);
 
       const timestamp = new Date().toISOString();
-      await appendUserCreations(
+      void appendUserCreations(
         userKey,
         [
           {
@@ -284,7 +286,9 @@ export default function GerarVideo() {
           },
         ],
         { userId: user?.uid },
-      );
+      ).catch((persistError) => {
+        console.warn("[gerar-video] Falha ao salvar criacao:", persistError);
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Geração cancelada.");

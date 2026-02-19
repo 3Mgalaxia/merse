@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiBriefcaseFill,
+  PiQuestionFill,
   PiDownloadSimpleFill,
   PiFilmSlateFill,
   PiMonitorPlayFill,
@@ -10,10 +11,13 @@ import {
   PiSparkleFill,
   PiUploadSimpleFill,
   PiUsersThreeFill,
+  PiXBold,
 } from "react-icons/pi";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEnergy } from "@/contexts/EnergyContext";
 import MerseLoadingOverlay from "@/components/MerseLoadingOverlay";
 import { useAuth } from "@/contexts/AuthContext";
+import PromptChat from "@/components/PromptChat";
 import {
   appendUserCreations,
   generateCreationId,
@@ -36,6 +40,15 @@ type GeneratedVideo = {
   url: string;
   storyboard?: string;
   duration?: number;
+  merged?: boolean;
+  mergeError?: string;
+  segments?: Array<{
+    index: number;
+    duration: number;
+    videoUrl: string;
+    cover?: string;
+    provider: string;
+  }>;
 };
 
 type CorporateHistory = {
@@ -102,6 +115,7 @@ export default function VideosEmpresas() {
   const [history, setHistory] = useState<CorporateHistory[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -218,15 +232,36 @@ export default function VideosEmpresas() {
         url: data.videoUrl,
         storyboard: data.storyboard,
         duration: data.duration ?? duration,
+        merged: Boolean(data.merged),
+        mergeError: typeof data.mergeError === "string" ? data.mergeError : undefined,
+        segments: Array.isArray(data.segments)
+          ? data.segments
+              .map((segment: any, idx: number) => ({
+                index:
+                  typeof segment?.index === "number" && Number.isFinite(segment.index)
+                    ? segment.index
+                    : idx + 1,
+                duration:
+                  typeof segment?.duration === "number" && Number.isFinite(segment.duration)
+                    ? segment.duration
+                    : 0,
+                videoUrl: typeof segment?.videoUrl === "string" ? segment.videoUrl : "",
+                cover: typeof segment?.cover === "string" ? segment.cover : undefined,
+                provider: typeof segment?.provider === "string" ? segment.provider : "unknown",
+              }))
+              .filter((segment: { videoUrl: string }) => Boolean(segment.videoUrl))
+          : undefined,
       });
       setStoryboard(data.storyboard ?? null);
+      // Nao bloqueie o fim do loader aguardando persistencia em background (Firebase/localStorage).
+      setIsLoading(false);
       energy.registerUsage(COST_PER_VIDEO);
 
       const goalLabel = GOALS.find((item) => item.id === goal)?.label ?? goal;
       const scenarioLabel = SCENARIOS.find((item) => item.id === scenario)?.label ?? scenario;
       const timestamp = new Date().toISOString();
 
-      await appendUserCreations(
+      void appendUserCreations(
         userKey,
         [
           {
@@ -245,7 +280,9 @@ export default function VideosEmpresas() {
           },
         ],
         { userId: user?.uid },
-      );
+      ).catch((persistError) => {
+        console.warn("[videos-empresas] Falha ao salvar criacao:", persistError);
+      });
 
       setHistory((prev) => [
         {
@@ -433,6 +470,16 @@ export default function VideosEmpresas() {
                     disabled={isLoading}
                   />
                 </label>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsAssistantOpen(true)}
+                    className="flex items-center gap-2 rounded-full border border-blue-400/60 bg-blue-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-blue-100 transition hover:bg-blue-500/20"
+                  >
+                    <PiQuestionFill className="text-sm" />
+                    Precisa de ajuda com o prompt?
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -542,6 +589,38 @@ export default function VideosEmpresas() {
                         download
                       </a>
                     </div>
+                    {generatedVideo.merged ? (
+                      <div className="w-full rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
+                        Vídeo final concatenado automaticamente a partir dos segmentos.
+                      </div>
+                    ) : generatedVideo.mergeError ? (
+                      <div className="w-full rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+                        Segmentos gerados, mas a concatenação automática falhou: {generatedVideo.mergeError}
+                      </div>
+                    ) : null}
+                    {Array.isArray(generatedVideo.segments) && generatedVideo.segments.length > 1 && (
+                      <div className="w-full rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4 text-xs text-blue-100">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-blue-200/80">
+                          Sequência em {generatedVideo.segments.length} clipes
+                        </p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {generatedVideo.segments.map((segment) => (
+                            <a
+                              key={`${segment.index}-${segment.videoUrl}`}
+                              href={segment.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center justify-between rounded-xl border border-blue-300/25 bg-black/30 px-3 py-2 text-[11px] text-blue-100 transition hover:border-blue-300/50"
+                            >
+                              <span>
+                                Clip {segment.index} • {segment.duration}s
+                              </span>
+                              <span className="uppercase tracking-[0.25em] text-blue-200/75">{segment.provider}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {generatedVideo.storyboard && (
                       <div className="w-full rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white/75">
                         <p className="text-xs uppercase tracking-[0.3em] text-white/50">Storyboard</p>
@@ -624,6 +703,42 @@ export default function VideosEmpresas() {
           </section>
         </div>
       </div>
+
+      <AnimatePresence>
+        {isAssistantOpen && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-40 cursor-default bg-black/0"
+              onClick={() => setIsAssistantOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.aside
+              className="fixed bottom-6 right-6 z-50 w-full max-w-md"
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            >
+              <div className="relative flex h-[520px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/85 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={() => setIsAssistantOpen(false)}
+                  className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 transition hover:border-white/40 hover:bg-white/20 hover:text-white"
+                  aria-label="Fechar assistente de prompts"
+                >
+                  <PiXBold className="text-base" />
+                </button>
+                <div className="h-full overflow-hidden px-4 pb-4 pt-10">
+                  <PromptChat embedded storageKey="merse.chat.corporate" />
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

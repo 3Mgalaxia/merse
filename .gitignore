@@ -157,3 +157,5 @@ yarn-error.log*
 .vercel
 *.dmg
 *.dmg
+.next-build
+.next-dev

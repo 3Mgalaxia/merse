@@ -396,7 +396,7 @@ export default function CriarPersonagem() {
       });
 
       if (nextPersona.portraitImage) {
-        await appendUserCreations(
+        void appendUserCreations(
           userKey,
           [
             {
@@ -414,7 +414,9 @@ export default function CriarPersonagem() {
             },
           ],
           { userId: user?.uid },
-        );
+        ).catch((persistError) => {
+          console.warn("[criar-personagem] Falha ao salvar criacao:", persistError);
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado ao gerar persona.";

@@ -12,6 +12,13 @@ type WorkflowCard = {
   outputSize: string;
   prompt: string;
   referenceImage: string | null;
+  generatedImageUrl: string | null;
+  generatedImages: string[];
+  continuityImageUrl: string | null;
+  generatedVideoUrl: string | null;
+  generatedCoverUrl: string | null;
+  generatedDuration: number | null;
+  continuityFrameUrl: string | null;
   x: number;
   y: number;
   width: number;
@@ -32,7 +39,8 @@ type PendingLink =
 const CANVAS_WIDTH = 2200;
 const CANVAS_HEIGHT = 1400;
 const CARD_WIDTH = 312;
-const CARD_HEIGHT = 300;
+const CARD_HEIGHT_IMAGE = 430;
+const CARD_HEIGHT_VIDEO = 430;
 
 const SIZE_OPTIONS: Record<GenerationType, string[]> = {
   image: ["1:1 (1024x1024)", "4:5 (1080x1350)", "16:9 (1920x1080)", "9:16 (1080x1920)"],
@@ -81,10 +89,17 @@ const INITIAL_CARDS: WorkflowCard[] = [
     prompt:
       "Crie um conceito visual cinematografico com luz suave, composicao limpa e detalhes premium.",
     referenceImage: "/LOJA-PROMPTS/CEU.png",
+    generatedImageUrl: null,
+    generatedImages: [],
+    continuityImageUrl: null,
+    generatedVideoUrl: null,
+    generatedCoverUrl: null,
+    generatedDuration: null,
+    continuityFrameUrl: null,
     x: 120,
     y: 180,
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    height: cardHeightForType("image"),
   },
   {
     id: "b",
@@ -95,10 +110,17 @@ const INITIAL_CARDS: WorkflowCard[] = [
     prompt:
       "Transforme a cena em video publicitario com movimento de camera lento, transicoes organicas e atmosfera high-end.",
     referenceImage: "/LOJA-PROMPTS/PRAIA.png",
+    generatedImageUrl: null,
+    generatedImages: [],
+    continuityImageUrl: null,
+    generatedVideoUrl: null,
+    generatedCoverUrl: null,
+    generatedDuration: null,
+    continuityFrameUrl: null,
     x: 560,
     y: 420,
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    height: cardHeightForType("video"),
   },
 ];
 
@@ -134,17 +156,59 @@ function nextCardPosition(existingCards: WorkflowCard[]) {
   const col = index % colCount;
   const row = Math.floor(index / colCount);
   const x = 120 + col * (CARD_WIDTH + 90);
-  const y = 120 + row * (CARD_HEIGHT + 64);
+  const y = 120 + row * (CARD_HEIGHT_VIDEO + 64);
   return {
     x: clamp(x, 24, CANVAS_WIDTH - CARD_WIDTH - 24),
-    y: clamp(y, 24, CANVAS_HEIGHT - CARD_HEIGHT - 24),
+    y: clamp(y, 24, CANVAS_HEIGHT - CARD_HEIGHT_VIDEO - 24),
   };
+}
+
+function cardHeightForType(type: GenerationType) {
+  return type === "video" ? CARD_HEIGHT_VIDEO : CARD_HEIGHT_IMAGE;
+}
+
+function aspectFromSizeLabel(size: string) {
+  const match = size.match(/(\d+:\d+)/);
+  return match?.[1] ?? "16:9";
+}
+
+function normalizeVideoProvider(referenceId: string): "veo" | "sora" | "merse" | "wan" | "kling" {
+  const value = referenceId.trim().toLowerCase();
+  if (value === "sora") return "sora";
+  if (value === "merse") return "merse";
+  if (value === "wan") return "wan";
+  if (value === "kling") return "kling";
+  return "veo";
+}
+
+function normalizeImageProvider(
+  referenceId: string,
+): "openai" | "flux" | "merse" | "nano-banana" | "runway-gen4" {
+  const value = referenceId.trim().toLowerCase();
+  if (value === "flux") return "flux";
+  if (value === "merse") return "merse";
+  if (value === "nano-banana") return "nano-banana";
+  if (value === "runway-gen4") return "runway-gen4";
+  return "openai";
+}
+
+function toReadableFilename(text: string) {
+  return (
+    text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "video-merse"
+  );
 }
 
 export default function LoopPage() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ cardId: string; offsetX: number; offsetY: number } | null>(null);
   const glowTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pulseTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   const [cards, setCards] = useState<WorkflowCard[]>(INITIAL_CARDS);
   const [edges, setEdges] = useState<WorkflowEdge[]>(INITIAL_EDGES);
@@ -152,6 +216,12 @@ export default function LoopPage() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [connectedCardIds, setConnectedCardIds] = useState<string[]>([]);
+  const [generatingCardIds, setGeneratingCardIds] = useState<string[]>([]);
+  const [pulseEdgeId, setPulseEdgeId] = useState<string | null>(null);
+  const [isPulseRunning, setIsPulseRunning] = useState(false);
+  const [isMergingSequence, setIsMergingSequence] = useState(false);
+  const [sequenceMergeUrl, setSequenceMergeUrl] = useState<string | null>(null);
+  const [sequenceMergeStatus, setSequenceMergeStatus] = useState<string | null>(null);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [newType, setNewType] = useState<GenerationType>("image");
   const [newSize, setNewSize] = useState<string>(SIZE_OPTIONS.image[0]);
@@ -164,6 +234,45 @@ export default function LoopPage() {
     return new Map(cards.map((card) => [card.id, card] as const));
   }, [cards]);
   const connectedCardSet = useMemo(() => new Set(connectedCardIds), [connectedCardIds]);
+  const generatingCardSet = useMemo(() => new Set(generatingCardIds), [generatingCardIds]);
+  const flowMetrics = useMemo(() => {
+    const inDegree = new Map<string, number>();
+    const outDegree = new Map<string, number>();
+
+    cards.forEach((card) => {
+      inDegree.set(card.id, 0);
+      outDegree.set(card.id, 0);
+    });
+
+    edges.forEach((edge) => {
+      outDegree.set(edge.from, (outDegree.get(edge.from) ?? 0) + 1);
+      inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
+    });
+
+    const isolated = cards.filter(
+      (card) => (inDegree.get(card.id) ?? 0) === 0 && (outDegree.get(card.id) ?? 0) === 0,
+    ).length;
+    const entries = cards.filter((card) => (inDegree.get(card.id) ?? 0) === 0).length;
+    const exits = cards.filter((card) => (outDegree.get(card.id) ?? 0) === 0).length;
+    const branching = cards.filter((card) => (outDegree.get(card.id) ?? 0) > 1).length;
+
+    const score = clamp(
+      Math.round(
+        100 - isolated * 20 - Math.max(0, entries - 1) * 8 - Math.max(0, exits - 1) * 6 + branching * 4,
+      ),
+      0,
+      100,
+    );
+
+    return {
+      score,
+      isolated,
+      entries,
+      exits,
+      branching,
+      statusLabel: score >= 85 ? "Estelar" : score >= 65 ? "Estavel" : "Em ajuste",
+    };
+  }, [cards, edges]);
 
   const sizeOptionsForNewCard = SIZE_OPTIONS[newType];
   const creationReferencesForNewCard = CREATION_REFERENCES[newType];
@@ -279,6 +388,8 @@ export default function LoopPage() {
     return () => {
       glowTimeoutRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
       glowTimeoutRef.current.clear();
+      pulseTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+      pulseTimeoutsRef.current = [];
     };
   }, []);
 
@@ -331,6 +442,582 @@ export default function LoopPage() {
     });
   }, []);
 
+  const clearPulseTimeline = useCallback(() => {
+    pulseTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+    pulseTimeoutsRef.current = [];
+    setPulseEdgeId(null);
+    setIsPulseRunning(false);
+  }, []);
+
+  const runEdgePulse = useCallback(() => {
+    if (!edges.length) return;
+
+    clearPulseTimeline();
+    setIsPulseRunning(true);
+
+    const orderedEdges = [...edges].sort((a, b) => {
+      const fromA = cardsById.get(a.from);
+      const fromB = cardsById.get(b.from);
+      const toA = cardsById.get(a.to);
+      const toB = cardsById.get(b.to);
+      return (
+        (fromA?.x ?? 0) - (fromB?.x ?? 0) ||
+        (toA?.x ?? 0) - (toB?.x ?? 0) ||
+        (fromA?.y ?? 0) - (fromB?.y ?? 0) ||
+        (toA?.y ?? 0) - (toB?.y ?? 0)
+      );
+    });
+
+    orderedEdges.forEach((edge, index) => {
+      const timeoutId = setTimeout(() => {
+        setPulseEdgeId(edge.id);
+        triggerCardGlow([edge.from, edge.to]);
+      }, index * 260);
+      pulseTimeoutsRef.current.push(timeoutId);
+    });
+
+    const finishTimeoutId = setTimeout(() => {
+      setPulseEdgeId(null);
+      setIsPulseRunning(false);
+    }, orderedEdges.length * 260 + 260);
+    pulseTimeoutsRef.current.push(finishTimeoutId);
+  }, [cardsById, clearPulseTimeline, edges, triggerCardGlow]);
+
+  const autoConnectOrphans = useCallback(() => {
+    if (cards.length < 2) return;
+
+    const highlightedIds = new Set<string>();
+    setEdges((previous) => {
+      const nextEdges = [...previous];
+      const existing = new Set(previous.map((edge) => `${edge.from}->${edge.to}`));
+      const inDegree = new Map<string, number>();
+      const outDegree = new Map<string, number>();
+
+      cards.forEach((card) => {
+        inDegree.set(card.id, 0);
+        outDegree.set(card.id, 0);
+      });
+
+      previous.forEach((edge) => {
+        outDegree.set(edge.from, (outDegree.get(edge.from) ?? 0) + 1);
+        inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
+      });
+
+      const sortedCards = [...cards].sort((a, b) => a.x - b.x || a.y - b.y);
+
+      sortedCards.forEach((card, index) => {
+        const noInputs = (inDegree.get(card.id) ?? 0) === 0;
+        const noOutputs = (outDegree.get(card.id) ?? 0) === 0;
+        if (!noInputs || !noOutputs) return;
+
+        const left = [...sortedCards.slice(0, index)].reverse().find((item) => item.id !== card.id);
+        const right = sortedCards.slice(index + 1).find((item) => item.id !== card.id);
+
+        const fromId = left ? left.id : card.id;
+        const toId = left ? card.id : right?.id;
+        if (!toId || fromId === toId) return;
+
+        const edgeKey = `${fromId}->${toId}`;
+        if (existing.has(edgeKey)) return;
+
+        nextEdges.push({ id: createEdgeId(), from: fromId, to: toId });
+        existing.add(edgeKey);
+        outDegree.set(fromId, (outDegree.get(fromId) ?? 0) + 1);
+        inDegree.set(toId, (inDegree.get(toId) ?? 0) + 1);
+        highlightedIds.add(fromId);
+        highlightedIds.add(toId);
+      });
+
+      return nextEdges;
+    });
+
+    if (highlightedIds.size) {
+      triggerCardGlow(Array.from(highlightedIds));
+    }
+  }, [cards, triggerCardGlow]);
+
+  const mutateCardFromDNA = useCallback(
+    (cardId: string) => {
+      const source = cardsById.get(cardId);
+      if (!source) return;
+
+      const mutationPrompt =
+        source.generationType === "video"
+          ? "Mutacao DNA: ritmo mais dinamico, camera com arco lateral e fechamento com CTA forte."
+          : "Mutacao DNA: novo angulo de camera, contraste premium e variacao cromatica complementar.";
+
+      const nextCard: WorkflowCard = {
+        ...source,
+        id: createCardId(),
+        title: `${source.title} • DNA`,
+        prompt: source.prompt ? `${source.prompt}\n${mutationPrompt}` : mutationPrompt,
+        generatedImageUrl: null,
+        generatedImages: [],
+        continuityImageUrl: null,
+        generatedVideoUrl: null,
+        generatedCoverUrl: null,
+        generatedDuration: null,
+        continuityFrameUrl: null,
+        x: clamp(source.x + CARD_WIDTH + 68, 24, CANVAS_WIDTH - source.width - 24),
+        y: clamp(source.y + 34, 24, CANVAS_HEIGHT - source.height - 24),
+      };
+
+      setCards((previous) => [...previous, nextCard]);
+      setEdges((previous) => {
+        if (previous.some((edge) => edge.from === source.id && edge.to === nextCard.id)) {
+          return previous;
+        }
+        return [...previous, { id: createEdgeId(), from: source.id, to: nextCard.id }];
+      });
+      triggerCardGlow([source.id, nextCard.id]);
+    },
+    [cardsById, triggerCardGlow],
+  );
+
+  const createSmartSequence = useCallback(() => {
+    const baseTitle = newTitle.trim() || (newType === "video" ? "Sequencia de Video" : "Sequencia de Imagem");
+    const origin = nextCardPosition(cards);
+    const sequenceHeight = cardHeightForType(newType);
+    const variationY = clamp(origin.y + 34, 24, CANVAS_HEIGHT - sequenceHeight - 24);
+    const finalY = clamp(origin.y + 8, 24, CANVAS_HEIGHT - sequenceHeight - 24);
+
+    const prompts =
+      newType === "video"
+        ? [
+            "Abertura cinematografica da campanha com narrativa clara e gancho inicial.",
+            "Plano de transicao com movimento de camera, prova de valor e ritmo crescente.",
+            "Fechamento com CTA forte, assinatura de marca e adaptacao para anuncios curtos.",
+          ]
+        : [
+            "Visual hero com composicao premium, foco no produto e iluminacao de estúdio.",
+            "Variacao com angulo alternativo, detalhes de textura e contraste elevado.",
+            "Frame final para conversao com CTA visual e identidade de marca consolidada.",
+          ];
+
+    const fallbackRef = defaultCreationReferenceId(newType);
+    const secondRef = creationReferencesForNewCard[1]?.id ?? fallbackRef;
+    const thirdRef = creationReferencesForNewCard[2]?.id ?? secondRef;
+    const sequenceCards: WorkflowCard[] = [
+      {
+        id: createCardId(),
+        title: `${baseTitle} • Origem`,
+        generationType: newType,
+        creationReferenceId: newCreationReferenceId || fallbackRef,
+        outputSize: newSize,
+        prompt: prompts[0],
+        referenceImage: null,
+        generatedImageUrl: null,
+        generatedImages: [],
+        continuityImageUrl: null,
+        generatedVideoUrl: null,
+        generatedCoverUrl: null,
+        generatedDuration: null,
+        continuityFrameUrl: null,
+        x: origin.x,
+        y: origin.y,
+        width: CARD_WIDTH,
+        height: cardHeightForType(newType),
+      },
+      {
+        id: createCardId(),
+        title: `${baseTitle} • Evolucao`,
+        generationType: newType,
+        creationReferenceId: secondRef,
+        outputSize: newSize,
+        prompt: prompts[1],
+        referenceImage: null,
+        generatedImageUrl: null,
+        generatedImages: [],
+        continuityImageUrl: null,
+        generatedVideoUrl: null,
+        generatedCoverUrl: null,
+        generatedDuration: null,
+        continuityFrameUrl: null,
+        x: clamp(origin.x + CARD_WIDTH + 92, 24, CANVAS_WIDTH - CARD_WIDTH - 24),
+        y: variationY,
+        width: CARD_WIDTH,
+        height: cardHeightForType(newType),
+      },
+      {
+        id: createCardId(),
+        title: `${baseTitle} • Final`,
+        generationType: newType,
+        creationReferenceId: thirdRef,
+        outputSize: newSize,
+        prompt: prompts[2],
+        referenceImage: null,
+        generatedImageUrl: null,
+        generatedImages: [],
+        continuityImageUrl: null,
+        generatedVideoUrl: null,
+        generatedCoverUrl: null,
+        generatedDuration: null,
+        continuityFrameUrl: null,
+        x: clamp(origin.x + (CARD_WIDTH + 92) * 2, 24, CANVAS_WIDTH - CARD_WIDTH - 24),
+        y: finalY,
+        width: CARD_WIDTH,
+        height: cardHeightForType(newType),
+      },
+    ];
+
+    setCards((previous) => [...previous, ...sequenceCards]);
+    setEdges((previous) => [
+      ...previous,
+      { id: createEdgeId(), from: sequenceCards[0].id, to: sequenceCards[1].id },
+      { id: createEdgeId(), from: sequenceCards[1].id, to: sequenceCards[2].id },
+    ]);
+    triggerCardGlow(sequenceCards.map((card) => card.id));
+    setIsCreatorOpen(false);
+  }, [
+    cards,
+    creationReferencesForNewCard,
+    newCreationReferenceId,
+    newSize,
+    newTitle,
+    newType,
+    triggerCardGlow,
+  ]);
+
+  const findUpstreamVideoCard = useCallback(
+    (targetCardId: string) => {
+      const visited = new Set<string>();
+      const queue = edges.filter((edge) => edge.to === targetCardId).map((edge) => edge.from);
+
+      while (queue.length) {
+        const currentId = queue.shift();
+        if (!currentId || visited.has(currentId)) continue;
+        visited.add(currentId);
+
+        const card = cardsById.get(currentId);
+        if (card?.generationType === "video" && card.generatedVideoUrl) {
+          return card;
+        }
+
+        edges.forEach((edge) => {
+          if (edge.to === currentId && !visited.has(edge.from)) {
+            queue.push(edge.from);
+          }
+        });
+      }
+
+      return null;
+    },
+    [cardsById, edges],
+  );
+
+  const findUpstreamImageCard = useCallback(
+    (targetCardId: string) => {
+      const visited = new Set<string>();
+      const queue = edges.filter((edge) => edge.to === targetCardId).map((edge) => edge.from);
+
+      while (queue.length) {
+        const currentId = queue.shift();
+        if (!currentId || visited.has(currentId)) continue;
+        visited.add(currentId);
+
+        const card = cardsById.get(currentId);
+        if (card?.generationType === "image" && (card.generatedImageUrl || card.referenceImage)) {
+          return card;
+        }
+
+        edges.forEach((edge) => {
+          if (edge.to === currentId && !visited.has(edge.from)) {
+            queue.push(edge.from);
+          }
+        });
+      }
+
+      return null;
+    },
+    [cardsById, edges],
+  );
+
+  const generateImageForCard = useCallback(
+    async (cardId: string) => {
+      const card = cardsById.get(cardId);
+      if (!card || card.generationType !== "image") return;
+
+      setGeneratingCardIds((previous) => (previous.includes(cardId) ? previous : [...previous, cardId]));
+
+      try {
+        const upstreamImageCard = findUpstreamImageCard(card.id);
+        const continuityImageUrl =
+          upstreamImageCard?.generatedImageUrl ?? upstreamImageCard?.referenceImage ?? null;
+
+        const continuityInstruction = continuityImageUrl
+          ? "CONTINUIDADE ESTRUTURAL OBRIGATORIA: preserve fielmente enquadramento, composição, posição dos elementos e hierarquia visual da referência. Altere apenas estilo, textura, luz e acabamento visual."
+          : "";
+
+        const finalPrompt = [card.prompt || "Crie uma imagem premium no estilo Merse.", continuityInstruction]
+          .filter(Boolean)
+          .join("\n\n");
+
+        const response = await fetch("/api/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: finalPrompt,
+            provider: normalizeImageProvider(card.creationReferenceId),
+            aspectRatio: aspectFromSizeLabel(card.outputSize),
+            count: 1,
+            referenceImage: continuityImageUrl ?? card.referenceImage ?? undefined,
+          }),
+        });
+
+        const payload = (await response.json()) as {
+          imageUrl?: string;
+          images?: string[];
+          error?: string;
+        };
+        if (!response.ok || typeof payload.imageUrl !== "string") {
+          throw new Error(payload.error ?? "Não foi possível gerar esta imagem agora.");
+        }
+
+        const images =
+          Array.isArray(payload.images) && payload.images.length
+            ? payload.images.filter((item): item is string => typeof item === "string")
+            : [payload.imageUrl];
+
+        updateCard(card.id, {
+          generatedImageUrl: payload.imageUrl,
+          generatedImages: images,
+          continuityImageUrl,
+        });
+
+        if (upstreamImageCard) {
+          triggerCardGlow([upstreamImageCard.id, card.id]);
+        } else {
+          triggerCardGlow([card.id]);
+        }
+      } catch (error) {
+        setSequenceMergeStatus(error instanceof Error ? error.message : "Falha ao gerar a imagem do card.");
+      } finally {
+        setGeneratingCardIds((previous) => previous.filter((item) => item !== cardId));
+      }
+    },
+    [cardsById, findUpstreamImageCard, triggerCardGlow, updateCard],
+  );
+
+  const generateVideoForCard = useCallback(
+    async (cardId: string) => {
+      const card = cardsById.get(cardId);
+      if (!card || card.generationType !== "video") return;
+
+      setGeneratingCardIds((previous) => (previous.includes(cardId) ? previous : [...previous, cardId]));
+      setSequenceMergeUrl(null);
+      setSequenceMergeStatus("Gerando vídeo no card...");
+
+      try {
+        const upstreamVideoCard = findUpstreamVideoCard(card.id);
+        let continuityFrameUrl: string | null = null;
+
+        if (upstreamVideoCard?.generatedVideoUrl) {
+          const frameResponse = await fetch("/api/loop/extract-last-frame", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              videoUrl: upstreamVideoCard.generatedVideoUrl,
+              cardId: upstreamVideoCard.id,
+            }),
+          });
+          const frameData = (await frameResponse.json()) as { frameUrl?: string; error?: string };
+          if (frameResponse.ok && typeof frameData.frameUrl === "string" && frameData.frameUrl.trim()) {
+            continuityFrameUrl = frameData.frameUrl.trim();
+          }
+        }
+
+        const continuityInstruction = continuityFrameUrl
+          ? "CONTINUIDADE OBRIGATORIA: use a imagem de referencia como ultimo frame do vídeo anterior e continue a cena sem corte, mantendo movimento, luz e direção de camera."
+          : "";
+
+        const finalPrompt = [card.prompt || "Crie um vídeo premium no estilo Merse.", continuityInstruction]
+          .filter(Boolean)
+          .join("\n\n");
+
+        const response = await fetch("/api/generate-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: finalPrompt,
+            provider: normalizeVideoProvider(card.creationReferenceId),
+            aspectRatio: aspectFromSizeLabel(card.outputSize),
+            referenceImage: continuityFrameUrl ?? card.referenceImage ?? undefined,
+          }),
+        });
+
+        const payload = (await response.json()) as {
+          videoUrl?: string;
+          cover?: string;
+          duration?: number;
+          error?: string;
+        };
+        if (!response.ok || typeof payload.videoUrl !== "string") {
+          throw new Error(payload.error ?? "Não foi possível gerar este vídeo agora.");
+        }
+
+        updateCard(card.id, {
+          generatedVideoUrl: payload.videoUrl,
+          generatedCoverUrl: typeof payload.cover === "string" ? payload.cover : continuityFrameUrl,
+          generatedDuration: typeof payload.duration === "number" ? payload.duration : null,
+          continuityFrameUrl,
+        });
+
+        if (upstreamVideoCard) {
+          triggerCardGlow([upstreamVideoCard.id, card.id]);
+        } else {
+          triggerCardGlow([card.id]);
+        }
+
+        setSequenceMergeStatus("Vídeo gerado. Você já pode salvar este card ou juntar a sequência.");
+      } catch (error) {
+        setSequenceMergeStatus(error instanceof Error ? error.message : "Falha ao gerar o vídeo do card.");
+      } finally {
+        setGeneratingCardIds((previous) => previous.filter((item) => item !== cardId));
+      }
+    },
+    [cardsById, findUpstreamVideoCard, triggerCardGlow, updateCard],
+  );
+
+  const saveCardVideo = useCallback(
+    (cardId: string) => {
+      if (typeof window === "undefined") return;
+      const card = cardsById.get(cardId);
+      if (!card?.generatedVideoUrl) return;
+
+      const baseUrl = window.location.origin;
+      const href = card.generatedVideoUrl.startsWith("http")
+        ? card.generatedVideoUrl
+        : `${baseUrl}${card.generatedVideoUrl.startsWith("/") ? "" : "/"}${card.generatedVideoUrl}`;
+
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.download = `${toReadableFilename(card.title)}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+    [cardsById],
+  );
+
+  const saveCardImage = useCallback(
+    (cardId: string) => {
+      if (typeof window === "undefined") return;
+      const card = cardsById.get(cardId);
+      if (!card?.generatedImageUrl) return;
+
+      const baseUrl = window.location.origin;
+      const href =
+        card.generatedImageUrl.startsWith("data:") || card.generatedImageUrl.startsWith("http")
+          ? card.generatedImageUrl
+          : `${baseUrl}${card.generatedImageUrl.startsWith("/") ? "" : "/"}${card.generatedImageUrl}`;
+
+      const extensionMatch = card.generatedImageUrl.match(/\.(png|jpe?g|webp|gif)(?:\?|$)/i);
+      const extension = extensionMatch?.[1]?.toLowerCase() === "jpeg" ? "jpg" : extensionMatch?.[1] ?? "png";
+
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.download = `${toReadableFilename(card.title)}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+    [cardsById],
+  );
+
+  const saveMergedSequence = useCallback(async () => {
+    if (isMergingSequence) return;
+
+    const inDegree = new Map<string, number>();
+    cards.forEach((card) => inDegree.set(card.id, 0));
+    edges.forEach((edge) => inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1));
+
+    const queue = cards
+      .filter((card) => (inDegree.get(card.id) ?? 0) === 0)
+      .sort((a, b) => a.x - b.x || a.y - b.y)
+      .map((card) => card.id);
+
+    const orderedIds: string[] = [];
+    const adjacency = new Map<string, string[]>();
+    edges.forEach((edge) => {
+      const list = adjacency.get(edge.from) ?? [];
+      list.push(edge.to);
+      adjacency.set(edge.from, list);
+    });
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current) break;
+      orderedIds.push(current);
+      const neighbours = adjacency.get(current) ?? [];
+      neighbours.forEach((next) => {
+        const nextDegree = (inDegree.get(next) ?? 0) - 1;
+        inDegree.set(next, nextDegree);
+        if (nextDegree === 0) {
+          queue.push(next);
+        }
+      });
+      queue.sort((left, right) => {
+        const leftCard = cardsById.get(left);
+        const rightCard = cardsById.get(right);
+        return (leftCard?.x ?? 0) - (rightCard?.x ?? 0) || (leftCard?.y ?? 0) - (rightCard?.y ?? 0);
+      });
+    }
+
+    if (orderedIds.length < cards.length) {
+      const remaining = cards
+        .filter((card) => !orderedIds.includes(card.id))
+        .sort((a, b) => a.x - b.x || a.y - b.y)
+        .map((card) => card.id);
+      orderedIds.push(...remaining);
+    }
+
+    const orderedVideoUrls = orderedIds
+      .map((id) => cardsById.get(id))
+      .filter((card): card is WorkflowCard => Boolean(card))
+      .filter((card) => card.generationType === "video" && typeof card.generatedVideoUrl === "string")
+      .map((card) => card.generatedVideoUrl as string);
+
+    if (!orderedVideoUrls.length) {
+      setSequenceMergeStatus("Nenhum vídeo gerado para salvar em sequência.");
+      return;
+    }
+
+    setIsMergingSequence(true);
+    setSequenceMergeStatus("Mesclando toda a sequência de vídeos...");
+    setSequenceMergeUrl(null);
+
+    try {
+      const response = await fetch("/api/loop/merge-sequence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrls: orderedVideoUrls,
+          sequenceName: "loop-sequencia-merse",
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        mergedUrl?: string;
+        error?: string;
+      };
+
+      if (!response.ok || typeof payload.mergedUrl !== "string") {
+        throw new Error(payload.error ?? "Não foi possível montar a sequência agora.");
+      }
+
+      setSequenceMergeUrl(payload.mergedUrl);
+      setSequenceMergeStatus("Sequência pronta. Clique em salvar para baixar o vídeo final.");
+    } catch (error) {
+      setSequenceMergeStatus(error instanceof Error ? error.message : "Falha ao salvar sequência.");
+    } finally {
+      setIsMergingSequence(false);
+    }
+  }, [cards, cardsById, edges, isMergingSequence]);
+
   const onReferenceImageChange = useCallback(
     (cardId: string, file: File | null) => {
       if (!file) return;
@@ -355,10 +1042,17 @@ export default function LoopPage() {
         outputSize: newSize,
         prompt: "",
         referenceImage: null,
+        generatedImageUrl: null,
+        generatedImages: [],
+        continuityImageUrl: null,
+        generatedVideoUrl: null,
+        generatedCoverUrl: null,
+        generatedDuration: null,
+        continuityFrameUrl: null,
         x: position.x,
         y: position.y,
         width: CARD_WIDTH,
-        height: CARD_HEIGHT,
+        height: cardHeightForType(newType),
       };
       return [...previous, card];
     });
@@ -375,6 +1069,7 @@ export default function LoopPage() {
     setCards((previous) => previous.filter((card) => card.id !== cardId));
     setEdges((previous) => previous.filter((edge) => edge.from !== cardId && edge.to !== cardId));
     setConnectedCardIds((previous) => previous.filter((id) => id !== cardId));
+    setGeneratingCardIds((previous) => previous.filter((id) => id !== cardId));
     setPendingLink(null);
     setSelectedEdgeId(null);
   }, []);
@@ -501,17 +1196,30 @@ export default function LoopPage() {
 
         <button
           type="button"
-          onClick={() => setIsCreatorOpen(true)}
-          aria-label="Criar novo card"
-          className="fixed right-5 top-1/2 z-40 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-xl border border-violet-300/35 bg-[#170f24]/95 text-violet-100 shadow-[0_0_24px_rgba(139,92,246,0.35),0_10px_32px_rgba(0,0,0,0.45)] transition hover:border-violet-200/70 hover:bg-[#1f1431]"
+          onClick={() => setIsCreatorOpen((previous) => !previous)}
+          aria-label={isCreatorOpen ? "Fechar painel de criacao" : "Criar novo card"}
+          className={`fixed right-5 top-1/2 z-50 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-xl border transition ${
+            isCreatorOpen
+              ? "border-rose-300/45 bg-[#2a0d14]/95 text-rose-100 shadow-[0_0_24px_rgba(244,63,94,0.35),0_10px_32px_rgba(0,0,0,0.45)] hover:border-rose-200/75 hover:bg-[#34101a]"
+              : "border-violet-300/35 bg-[#170f24]/95 text-violet-100 shadow-[0_0_24px_rgba(139,92,246,0.35),0_10px_32px_rgba(0,0,0,0.45)] hover:border-violet-200/70 hover:bg-[#1f1431]"
+          }`}
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M12 5.5V18.5M5.5 12H18.5"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
+            {isCreatorOpen ? (
+              <path
+                d="M6.5 6.5L17.5 17.5M17.5 6.5L6.5 17.5"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                d="M12 5.5V18.5M5.5 12H18.5"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            )}
           </svg>
         </button>
 
@@ -529,15 +1237,8 @@ export default function LoopPage() {
             isCreatorOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6">
             <h2 className="text-base font-semibold text-violet-100">Criar Novo Card</h2>
-            <button
-              type="button"
-              onClick={() => setIsCreatorOpen(false)}
-              className="rounded-md border border-violet-300/20 px-2 py-1 text-xs text-violet-100/80 hover:bg-violet-400/10"
-            >
-              Fechar
-            </button>
           </div>
 
           <div className="space-y-4">
@@ -619,8 +1320,78 @@ export default function LoopPage() {
             >
               Criar Card no Canvas
             </button>
+
+            <div className="space-y-2 rounded-xl border border-violet-300/20 bg-[#140d22]/75 p-3">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-violet-100/60">Funcoes Orbitais</p>
+              <button
+                type="button"
+                onClick={createSmartSequence}
+                className="w-full rounded-lg border border-cyan-300/35 bg-cyan-500/15 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/25"
+              >
+                Gerar Trilha Inteligente (3 cards)
+              </button>
+              <button
+                type="button"
+                onClick={autoConnectOrphans}
+                className="w-full rounded-lg border border-fuchsia-300/35 bg-fuchsia-500/15 px-3 py-2 text-xs font-semibold text-fuchsia-100 transition hover:bg-fuchsia-500/25"
+              >
+                Conectar Cards Orfaos
+              </button>
+            </div>
           </div>
         </aside>
+
+        <section className="fixed bottom-5 left-5 z-30 w-[270px] rounded-xl border border-violet-300/25 bg-[#0f0919]/92 p-4 shadow-[0_16px_38px_rgba(0,0,0,0.46)] backdrop-blur-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-violet-100/70">DNA do Loop</p>
+            <span className="rounded-full border border-violet-200/30 bg-violet-500/14 px-2 py-0.5 text-[11px] font-semibold text-violet-100">
+              {flowMetrics.score}
+            </span>
+          </div>
+          <p className="text-xs text-violet-100/75">
+            Status: <span className="font-semibold text-violet-50">{flowMetrics.statusLabel}</span>
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-violet-100/70">
+            <span>Entradas: {flowMetrics.entries}</span>
+            <span>Saídas: {flowMetrics.exits}</span>
+            <span>Órfãos: {flowMetrics.isolated}</span>
+            <span>Branches: {flowMetrics.branching}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={runEdgePulse}
+              disabled={isPulseRunning || edges.length === 0}
+              className="rounded-lg border border-cyan-300/35 bg-cyan-500/16 px-2 py-2 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-500/24 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {isPulseRunning ? "Pulso..." : "Pulso Orbital"}
+            </button>
+            <button
+              type="button"
+              onClick={autoConnectOrphans}
+              className="rounded-lg border border-fuchsia-300/35 bg-fuchsia-500/16 px-2 py-2 text-[11px] font-semibold text-fuchsia-100 transition hover:bg-fuchsia-500/24"
+            >
+              Corrigir Órfãos
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={saveMergedSequence}
+            disabled={isMergingSequence}
+            className="mt-2 w-full rounded-lg border border-emerald-300/35 bg-emerald-500/16 px-2 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {isMergingSequence ? "Juntando sequência..." : "Salvar Sequência (1 vídeo)"}
+          </button>
+          {sequenceMergeStatus ? <p className="mt-2 text-[11px] text-violet-100/70">{sequenceMergeStatus}</p> : null}
+          {sequenceMergeUrl ? (
+            <a
+              href={sequenceMergeUrl}
+              className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-emerald-200/45 bg-emerald-400/18 px-2 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/30"
+            >
+              Baixar Vídeo Final da Sequência
+            </a>
+          ) : null}
+        </section>
 
         <div className="relative min-h-screen w-full overflow-auto p-8 pr-24">
           <div
@@ -641,12 +1412,20 @@ export default function LoopPage() {
                 if (!fromCard || !toCard) return null;
                 const start = cardOutputPoint(fromCard);
                 const end = cardInputPoint(toCard);
+                const isPulseEdge = edge.id === pulseEdgeId;
+                const isSelectedEdge = edge.id === selectedEdgeId;
                 return (
                   <g key={edge.id}>
                     <path
                       d={curvePath(start, end)}
-                      stroke={edge.id === selectedEdgeId ? "rgba(233,213,255,0.98)" : "rgba(192,132,252,0.72)"}
-                      strokeWidth={edge.id === selectedEdgeId ? 2.6 : 2.1}
+                      stroke={
+                        isPulseEdge
+                          ? "rgba(125,211,252,0.96)"
+                          : isSelectedEdge
+                          ? "rgba(233,213,255,0.98)"
+                          : "rgba(192,132,252,0.72)"
+                      }
+                      strokeWidth={isPulseEdge ? 2.9 : isSelectedEdge ? 2.6 : 2.1}
                       strokeLinecap="round"
                       onClick={() => setSelectedEdgeId(edge.id)}
                       onDoubleClick={() => {
@@ -754,18 +1533,32 @@ export default function LoopPage() {
                         card.creationReferenceId}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    data-no-drag
-                    aria-label={`Excluir ${card.title}`}
-                    className="rounded-md border border-violet-300/25 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-100/80 transition hover:border-rose-300/60 hover:bg-rose-500/20 hover:text-rose-100"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      deleteCard(card.id);
-                    }}
-                  >
-                    X
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-no-drag
+                      aria-label={`Mutacao DNA para ${card.title}`}
+                      className="rounded-md border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/90 transition hover:border-cyan-200/60 hover:bg-cyan-500/22"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        mutateCardFromDNA(card.id);
+                      }}
+                    >
+                      DNA
+                    </button>
+                    <button
+                      type="button"
+                      data-no-drag
+                      aria-label={`Excluir ${card.title}`}
+                      className="rounded-md border border-violet-300/25 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-100/80 transition hover:border-rose-300/60 hover:bg-rose-500/20 hover:text-rose-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        deleteCard(card.id);
+                      }}
+                    >
+                      X
+                    </button>
+                  </div>
                 </div>
 
                 <div data-no-drag className="space-y-2 px-3 pb-3">
@@ -800,6 +1593,101 @@ export default function LoopPage() {
                       className="h-20 w-full resize-none rounded-md border border-violet-300/20 bg-[#160f24]/85 px-2 py-1.5 text-xs text-violet-50 outline-none"
                     />
                   </div>
+                  {card.generationType === "image" ? (
+                    <div className="rounded-md border border-fuchsia-300/20 bg-fuchsia-500/8 p-2">
+                      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-fuchsia-100/75">
+                        <span>Automação de Imagem</span>
+                        <span>{aspectFromSizeLabel(card.outputSize)}</span>
+                      </div>
+                      <div className={`grid gap-2 ${card.generatedImageUrl ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <button
+                          type="button"
+                          data-no-drag
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void generateImageForCard(card.id);
+                          }}
+                          disabled={generatingCardSet.has(card.id)}
+                          className="rounded-md border border-fuchsia-300/35 bg-fuchsia-500/15 px-2 py-1.5 text-[11px] font-semibold text-fuchsia-100 transition hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {generatingCardSet.has(card.id) ? "Gerando..." : "Gerar Imagem"}
+                        </button>
+                        {card.generatedImageUrl ? (
+                          <button
+                            type="button"
+                            data-no-drag
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              saveCardImage(card.id);
+                            }}
+                            className="rounded-md border border-emerald-300/35 bg-emerald-500/14 px-2 py-1.5 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24"
+                          >
+                            Salvar Imagem
+                          </button>
+                        ) : null}
+                      </div>
+                      {card.generatedImageUrl ? (
+                        <img
+                          src={card.generatedImageUrl}
+                          alt={`Prévia gerada de ${card.title}`}
+                          className="mt-2 h-24 w-full rounded-md border border-fuchsia-300/20 bg-black/35 object-cover"
+                        />
+                      ) : null}
+                      {card.continuityImageUrl ? (
+                        <p className="mt-1 text-[10px] text-fuchsia-100/75">
+                          Continuidade ativa: estrutura do card anterior aplicada.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {card.generationType === "video" ? (
+                    <div className="rounded-md border border-cyan-300/20 bg-cyan-500/8 p-2">
+                      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-cyan-100/75">
+                        <span>Automação de Vídeo</span>
+                        <span>{card.generatedDuration ? `${card.generatedDuration}s` : aspectFromSizeLabel(card.outputSize)}</span>
+                      </div>
+                      <div className={`grid gap-2 ${card.generatedVideoUrl ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <button
+                          type="button"
+                          data-no-drag
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void generateVideoForCard(card.id);
+                          }}
+                          disabled={generatingCardSet.has(card.id)}
+                          className="rounded-md border border-cyan-300/35 bg-cyan-500/15 px-2 py-1.5 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {generatingCardSet.has(card.id) ? "Gerando..." : "Gerar Vídeo"}
+                        </button>
+                        {card.generatedVideoUrl ? (
+                          <button
+                            type="button"
+                            data-no-drag
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              saveCardVideo(card.id);
+                            }}
+                            className="rounded-md border border-emerald-300/35 bg-emerald-500/14 px-2 py-1.5 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24"
+                          >
+                            Salvar Vídeo
+                          </button>
+                        ) : null}
+                      </div>
+                      {card.generatedVideoUrl ? (
+                        <video
+                          src={card.generatedVideoUrl}
+                          controls
+                          playsInline
+                          className="mt-2 h-24 w-full rounded-md border border-cyan-300/20 bg-black/35 object-cover"
+                        />
+                      ) : null}
+                      {card.continuityFrameUrl ? (
+                        <p className="mt-1 text-[10px] text-cyan-100/70">
+                          Continuidade ativa: último frame do vídeo anterior aplicado.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div>
                     <label className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-violet-100/60">
                       Imagem de Referencia

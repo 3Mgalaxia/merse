@@ -282,7 +282,9 @@ export default function GerarFoto() {
           meta,
         };
       });
-      await appendUserCreations(userKey, records, { userId: user?.uid });
+      void appendUserCreations(userKey, records, { userId: user?.uid }).catch((persistError) => {
+        console.warn("[gerar-foto] Falha ao salvar criacao:", persistError);
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Geração cancelada.");

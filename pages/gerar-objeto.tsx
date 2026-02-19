@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   PiArrowsClockwiseBold,
@@ -21,6 +22,11 @@ import {
 } from "@/lib/creations";
 
 const COST_PER_OBJECT = 18;
+
+const GlbPreview = dynamic(
+  () => import("@/components/ApiGlbPreview").then((mod) => mod.ApiGlbPreviewWithUrl),
+  { ssr: false },
+);
 
 type MaterialPreset = {
   id: string;
@@ -87,6 +93,17 @@ export default function GerarObjeto() {
     () => getUserStorageKey(user?.email ?? undefined, user?.uid ?? undefined),
     [user?.email, user?.uid],
   );
+
+  const primaryModelUrl = useMemo(() => {
+    const glb = downloads.find(
+      (entry) => entry.type === "glb" || entry.url.toLowerCase().split("?")[0].endsWith(".glb"),
+    );
+    if (glb) return glb.url;
+    const gltf = downloads.find(
+      (entry) => entry.type === "gltf" || entry.url.toLowerCase().split("?")[0].endsWith(".gltf"),
+    );
+    return gltf?.url ?? null;
+  }, [downloads]);
 
   const handleUpload = (
     event: ChangeEvent<HTMLInputElement>,
@@ -196,6 +213,8 @@ export default function GerarObjeto() {
       setRenders(generated);
       setDownloads(generatedDownloads);
       setProviderUsed(typeof data.provider === "string" ? data.provider : null);
+      // Nao bloqueie o fim do loader aguardando persistencia em background (Firebase/localStorage).
+      setIsLoading(false);
       energy.registerUsage(COST_PER_OBJECT);
 
       const lightingLabel =
@@ -216,7 +235,9 @@ export default function GerarObjeto() {
             provider: typeof data.provider === "string" ? data.provider : undefined,
           },
         }));
-        await appendUserCreations(userKey, records, { userId: user?.uid });
+        void appendUserCreations(userKey, records, { userId: user?.uid }).catch((persistError) => {
+          console.warn("[gerar-objeto] Falha ao salvar criacao:", persistError);
+        });
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -546,6 +567,22 @@ export default function GerarObjeto() {
             ) : null}
           </header>
 
+          {primaryModelUrl ? (
+            <section className="overflow-hidden rounded-3xl border border-purple-200/15 bg-white/[0.03] shadow-[0_22px_70px_rgba(0,0,0,0.45)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-white/75">
+                  Preview 3D
+                </p>
+                <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">
+                  Arraste para rotacionar
+                </p>
+              </div>
+              <div className="h-[360px]">
+                <GlbPreview url={primaryModelUrl} />
+              </div>
+            </section>
+          ) : null}
+
           {downloads.length > 0 && (
             <section className="rounded-3xl border border-cyan-300/25 bg-cyan-500/10 p-5 text-white/80">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -627,7 +664,7 @@ export default function GerarObjeto() {
             ))}
           </div>
 
-          {!isLoading && renders.length === 0 && (
+          {!isLoading && renders.length === 0 && downloads.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-white/15 bg-white/[0.03] p-10 text-center text-sm text-white/60">
               <PiArrowsClockwiseBold className="text-3xl text-purple-300" />
               <p>

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import crypto from "node:crypto";
 import OpenAI from "openai";
 
 type SuccessResponse = {
@@ -21,8 +22,23 @@ type PredictionStatus = {
   error?: { message?: string; details?: string };
 };
 
+class ReplicateTimeoutError extends Error {
+  predictionId: string;
+
+  constructor(predictionId: string, message = "Tempo esgotado aguardando a Replicate finalizar.") {
+    super(message);
+    this.name = "ReplicateTimeoutError";
+    this.predictionId = predictionId;
+  }
+}
+
+function isReplicateTimeoutError(error: unknown): error is ReplicateTimeoutError {
+  return error instanceof ReplicateTimeoutError;
+}
+
 const REPLICATE_BASE_URL = "https://api.replicate.com/v1";
 const versionCache = new Map<string, string>();
+const pendingPredictionCache = new Map<string, { predictionId: string; updatedAt: number }>();
 
 const TARGET_REFERENCES: Record<
   TargetGender,
@@ -90,6 +106,55 @@ function normalizeProviderHint(value: unknown): ProviderHint {
   return "auto";
 }
 
+function hashString(value: string) {
+  return crypto.createHash("sha1").update(value).digest("hex");
+}
+
+function buildPendingKey(params: {
+  image: string;
+  targetGender: TargetGender;
+  intensity: number;
+  userPrompt: string;
+}) {
+  return hashString(
+    JSON.stringify({
+      imageHash: hashString(params.image),
+      targetGender: params.targetGender,
+      intensity: params.intensity,
+      userPrompt: params.userPrompt.trim().toLowerCase(),
+      version: 1,
+    }),
+  );
+}
+
+function prunePendingPredictionCache() {
+  const maxAgeMs = 1000 * 60 * 60 * 3;
+  const now = Date.now();
+  for (const [key, value] of pendingPredictionCache.entries()) {
+    if (now - value.updatedAt > maxAgeMs) {
+      pendingPredictionCache.delete(key);
+    }
+  }
+}
+
+function shouldStartNewPrediction(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("não encontrada") ||
+    message.includes("not found") ||
+    message.includes("404")
+  );
+}
+
+function firstNonEmpty(...values: Array<string | undefined | null>) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
 function extractBase64Payload(dataUrl: string) {
   const match = dataUrl.match(/^data:(.+?);base64,(.+)$/);
   if (match) {
@@ -131,12 +196,10 @@ function buildOpenAIPrompt({
 }
 
 async function generateWithOpenAI({
-  image,
   targetGender,
   intensity,
   userPrompt,
 }: {
-  image: string;
   targetGender: TargetGender;
   intensity: number;
   userPrompt: string;
@@ -157,7 +220,6 @@ async function generateWithOpenAI({
     n: 1,
     size: "auto",
     quality: "high",
-    ...(image ? { image } : {}),
   };
 
   const response = await openai.images.generate(requestPayload);
@@ -242,8 +304,11 @@ async function createPrediction(token: string, payload: Record<string, unknown>)
 }
 
 async function awaitPrediction(token: string, id: string) {
-  const maxAttempts = 40;
-  const delayMs = 2500;
+  const maxAttempts = Number.parseInt(
+    process.env.REPLICATE_GENDER_SWAP_MAX_ATTEMPTS ?? "120",
+    10,
+  );
+  const delayMs = Number.parseInt(process.env.REPLICATE_GENDER_SWAP_POLL_MS ?? "2500", 10);
   let latest: PredictionStatus = {};
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -280,7 +345,7 @@ async function awaitPrediction(token: string, id: string) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
-  throw new Error("Tempo esgotado aguardando a Replicate finalizar.");
+  throw new ReplicateTimeoutError(id, "Tempo esgotado aguardando a Replicate finalizar.");
 }
 
 function collectImage(payload: unknown): string | null {
@@ -312,11 +377,13 @@ async function generateWithReplicate({
   targetGender,
   intensity,
   userPrompt,
+  existingPredictionId,
 }: {
   image: string;
   targetGender: TargetGender;
   intensity: number;
   userPrompt: string;
+  existingPredictionId?: string;
 }) {
   const token =
     process.env.REPLICATE_GENDER_SWAP_API_TOKEN ??
@@ -326,8 +393,21 @@ async function generateWithReplicate({
     throw new Error("REPLICATE_API_TOKEN ausente.");
   }
 
-  const model = process.env.REPLICATE_GENDER_SWAP_MODEL?.trim() || "easel/advanced-face-swap";
-  const version = await ensureReplicateVersion(token, model, process.env.REPLICATE_GENDER_SWAP_MODEL_VERSION);
+  const model =
+    firstNonEmpty(
+      process.env.REPLICATE_GENDER_SWAP_MODEL,
+      process.env.REPLICATE_FLUX_MODEL,
+      process.env.REPLICATE_MERSE_MODEL,
+    ) ?? "3mgalaxia/merse-image-v1";
+  const version = await ensureReplicateVersion(
+    token,
+    model,
+    firstNonEmpty(
+      process.env.REPLICATE_GENDER_SWAP_MODEL_VERSION,
+      process.env.REPLICATE_FLUX_MODEL_VERSION,
+      process.env.REPLICATE_MERSE_MODEL_VERSION,
+    ),
+  );
 
   const ref = TARGET_REFERENCES[targetGender];
   const intensityNote =
@@ -346,7 +426,7 @@ async function generateWithReplicate({
       })()
     : image;
 
-  const input: Record<string, unknown> = {
+  const faceSwapInput: Record<string, unknown> = {
     swap_image: swapImage,
     target_image: ref.targetImage,
     user_gender: ref.userGender,
@@ -357,25 +437,100 @@ async function generateWithReplicate({
     prompt: stylePrompt,
   };
 
-  let prediction;
-  try {
-    prediction = await createPrediction(token, { version, input });
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : "";
-    if (message.includes("prompt")) {
-      delete input.prompt;
-      prediction = await createPrediction(token, { version, input });
-    } else {
-      throw error;
+  const generationPrompt = [
+    stylePrompt,
+    `Transform the uploaded portrait into ${targetGender === "feminino" ? "female" : "male"} presentation.`,
+    "Keep same person identity, same pose, realistic skin and natural lighting.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const genericImageInput: Record<string, unknown> = {
+    prompt: generationPrompt,
+    image: swapImage,
+    num_outputs: 1,
+    aspect_ratio: "1:1",
+    guidance: 7.5,
+  };
+
+  const genericInputImageInput: Record<string, unknown> = {
+    prompt: generationPrompt,
+    input_image: swapImage,
+    num_outputs: 1,
+    aspect_ratio: "1:1",
+    guidance: 7.5,
+  };
+
+  const promptOnlyInput: Record<string, unknown> = {
+    prompt: generationPrompt,
+    num_outputs: 1,
+    aspect_ratio: "1:1",
+    guidance: 7.5,
+  };
+
+  const prefersFaceSwapSchema = /face-swap|faceswap|swap/i.test(model);
+  const inputCandidates = prefersFaceSwapSchema
+    ? [faceSwapInput, genericImageInput, genericInputImageInput, promptOnlyInput]
+    : [genericImageInput, genericInputImageInput, faceSwapInput, promptOnlyInput];
+
+  const resolveFinalImage = async (predictionId: string) => {
+    const finalStatus = await awaitPrediction(token, predictionId);
+    const imageUrl = collectImage(finalStatus.output);
+    if (!imageUrl) {
+      throw new Error("Replicate não retornou a imagem transformada.");
+    }
+    return imageUrl;
+  };
+
+  if (existingPredictionId?.trim()) {
+    try {
+      return await resolveFinalImage(existingPredictionId.trim());
+    } catch (error) {
+      if (isReplicateTimeoutError(error)) {
+        throw error;
+      }
+      if (!shouldStartNewPrediction(error)) {
+        throw error;
+      }
     }
   }
 
-  const finalStatus = await awaitPrediction(token, prediction.id);
-  const imageUrl = collectImage(finalStatus.output);
-  if (!imageUrl) {
-    throw new Error("Replicate não retornou a imagem transformada.");
+  let prediction: { id: string; status: string } | null = null;
+  const creationFailures: string[] = [];
+
+  for (const candidateInput of inputCandidates) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      prediction = await createPrediction(token, { version, input: candidateInput });
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "erro desconhecido";
+      creationFailures.push(message);
+
+      const normalized = message.toLowerCase();
+      if (normalized.includes("prompt") && "prompt" in candidateInput) {
+        const retryInput = { ...candidateInput };
+        delete retryInput.prompt;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          prediction = await createPrediction(token, { version, input: retryInput });
+          break;
+        } catch (retryError) {
+          const retryMessage =
+            retryError instanceof Error ? retryError.message : "erro desconhecido";
+          creationFailures.push(retryMessage);
+        }
+      }
+    }
   }
-  return imageUrl;
+
+  if (!prediction) {
+    throw new Error(
+      `Falha ao iniciar predição no modelo ${model}. ${creationFailures.slice(0, 4).join(" | ")}`,
+    );
+  }
+
+  return await resolveFinalImage(prediction.id);
 }
 
 export default async function handler(
@@ -406,12 +561,19 @@ export default async function handler(
   }
 
   const failures: string[] = [];
+  const pendingKey = buildPendingKey({
+    image,
+    targetGender,
+    intensity,
+    userPrompt,
+  });
+  prunePendingPredictionCache();
 
   try {
-    if (providerHint !== "replicate") {
+    const shouldTryOpenAIFirst = providerHint === "openai";
+    if (shouldTryOpenAIFirst) {
       try {
         const imageUrl = await generateWithOpenAI({
-          image,
           targetGender,
           intensity,
           userPrompt,
@@ -424,13 +586,30 @@ export default async function handler(
     }
 
     if (providerHint !== "openai") {
-      const imageUrl = await generateWithReplicate({
-        image,
-        targetGender,
-        intensity,
-        userPrompt,
-      });
-      return res.status(200).json({ imageUrl, provider: "replicate" });
+      const pendingPredictionId = pendingPredictionCache.get(pendingKey)?.predictionId;
+      try {
+        const imageUrl = await generateWithReplicate({
+          image,
+          targetGender,
+          intensity,
+          userPrompt,
+          existingPredictionId: pendingPredictionId,
+        });
+        pendingPredictionCache.delete(pendingKey);
+        return res.status(200).json({ imageUrl, provider: "replicate" });
+      } catch (error) {
+        if (isReplicateTimeoutError(error)) {
+          pendingPredictionCache.set(pendingKey, {
+            predictionId: error.predictionId,
+            updatedAt: Date.now(),
+          });
+          throw new Error(
+            `Tempo esgotado aguardando a Replicate finalizar. Reenvie para retomar a mesma predição (${error.predictionId}) sem criar nova cobrança.`,
+          );
+        }
+        pendingPredictionCache.delete(pendingKey);
+        throw error;
+      }
     }
 
     throw new Error("Nenhum provedor disponível para este request.");

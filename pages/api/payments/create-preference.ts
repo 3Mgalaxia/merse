@@ -13,8 +13,8 @@ const planPrices: Record<string, number> = {
   free: 0,
   // Planos principais (cobrança em USD)
   pulse: 10,
-  nebula: 35,
-  supernova: 79,
+  nebula: 24,
+  supernova: 35,
   // Itens pontuais (mantidos em BRL)
   "leaderboard-image": 1,
   "leaderboard-object": 2,

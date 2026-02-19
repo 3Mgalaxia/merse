@@ -140,7 +140,8 @@ function GalaxyField({
   const pointsRef = useRef<THREE.Points>(null);
   const COUNT = 36000;
   const SWEEP_COLORS = useMemo(
-    () => ["#A855F7", "#7C3AED", "#3B82F6", "#22D3EE", "#EC4899"].map((hex) => new THREE.Color(hex)),
+    () =>
+      ["#9333EA", "#7E22CE", "#2563EB", "#3B82F6", "#EC4899"].map((hex) => new THREE.Color(hex)),
     []
   );
   const SWEEP_MS = 5200;
@@ -149,9 +150,9 @@ function GalaxyField({
     const sizes = new Float32Array(COUNT);
     const colors = new Float32Array(COUNT * 3);
     const seeds = new Float32Array(COUNT);
-    const colA = new THREE.Color("#62A8FF");
-    const colB = new THREE.Color("#B86BFF");
-    const colC = new THREE.Color("#FF4FD8");
+    const colA = new THREE.Color("#2563EB");
+    const colB = new THREE.Color("#9333EA");
+    const colC = new THREE.Color("#EC4899");
 
     for (let i = 0; i < COUNT; i += 1) {
       const t = Math.random() * Math.PI * 2;
@@ -262,8 +263,8 @@ function GalaxyField({
         uSweep: { value: 0 },
         uSweepDir: { value: 1 },
         uSweepBand: { value: 0.13 },
-        uColorFrom: { value: new THREE.Color("#A855F7") },
-        uColorTo: { value: new THREE.Color("#A855F7") },
+        uColorFrom: { value: new THREE.Color("#9333EA") },
+        uColorTo: { value: new THREE.Color("#9333EA") },
         uImpact: { value: 0 },
         uImpactPos: { value: new THREE.Vector2(0.5, 0.5) },
       },
@@ -332,7 +333,8 @@ function GalaxyRingField({
   const CYAN_COUNT = 65000;
   const PURPLE_COUNT = 70000;
   const SWEEP_COLORS = useMemo(
-    () => ["#A855F7", "#7C3AED", "#3B82F6", "#22D3EE", "#60A5FA"].map((hex) => new THREE.Color(hex)),
+    () =>
+      ["#A855F7", "#7C3AED", "#3B82F6", "#22D3EE", "#60A5FA"].map((hex) => new THREE.Color(hex)),
     []
   );
 
@@ -552,9 +554,9 @@ function GalaxyRingField({
         uOpacity: { value: 1 },
         uDarkness: { value: 0 },
         uPal0: { value: new THREE.Color("#A855F7") },
-        uPal1: { value: new THREE.Color("#3B82F6") },
-        uPal2: { value: new THREE.Color("#22D3EE") },
-        uPal3: { value: new THREE.Color("#EC4899") },
+        uPal1: { value: new THREE.Color("#7C3AED") },
+        uPal2: { value: new THREE.Color("#3B82F6") },
+        uPal3: { value: new THREE.Color("#22D3EE") },
         uPal4: { value: new THREE.Color("#60A5FA") },
         uImpact: { value: 0 },
         uImpactPos: { value: new THREE.Vector2(0.5, 0.5) },
@@ -880,8 +882,8 @@ function ParticlePlanet3D({ intensity }: { intensity: number }) {
   const ringRef = useRef<THREE.Points>(null);
   const pulseRef = useRef(0);
   const spinBurstRef = useRef(0);
-  const paletteARef = useRef(new THREE.Color("#A855F7"));
-  const paletteBRef = useRef(new THREE.Color("#3B82F6"));
+  const paletteARef = useRef(new THREE.Color("#9333EA"));
+  const paletteBRef = useRef(new THREE.Color("#2563EB"));
 
   const onPlanetTap = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -900,11 +902,11 @@ function ParticlePlanet3D({ intensity }: { intensity: number }) {
   const WORD_THEMES = useMemo(
     () => [
       // CREATE
-      { a: new THREE.Color("#A855F7"), b: new THREE.Color("#3B82F6") },
+      { a: new THREE.Color("#9333EA"), b: new THREE.Color("#2563EB") },
       // DISCOVER
-      { a: new THREE.Color("#22D3EE"), b: new THREE.Color("#3B82F6") },
+      { a: new THREE.Color("#3B82F6"), b: new THREE.Color("#2563EB") },
       // EVOLVE
-      { a: new THREE.Color("#EC4899"), b: new THREE.Color("#A855F7") },
+      { a: new THREE.Color("#DB2777"), b: new THREE.Color("#7E22CE") },
     ],
     []
   );
@@ -971,8 +973,8 @@ function ParticlePlanet3D({ intensity }: { intensity: number }) {
         uTime: { value: 0 },
         uPulse: { value: 0 },
         uIntensity: { value: intensity },
-        uColorA: { value: new THREE.Color("#A855F7") },
-        uColorB: { value: new THREE.Color("#3B82F6") },
+        uColorA: { value: new THREE.Color("#9333EA") },
+        uColorB: { value: new THREE.Color("#2563EB") },
       },
     });
   }, [intensity]);
@@ -1037,8 +1039,8 @@ function ParticlePlanet3D({ intensity }: { intensity: number }) {
         uTime: { value: 0 },
         uPulse: { value: 0 },
         uIntensity: { value: intensity },
-        uColorA: { value: new THREE.Color("#A855F7") },
-        uColorB: { value: new THREE.Color("#3B82F6") },
+        uColorA: { value: new THREE.Color("#9333EA") },
+        uColorB: { value: new THREE.Color("#2563EB") },
       },
     });
   }, [intensity]);

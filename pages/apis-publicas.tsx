@@ -1,5 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
+import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -11,6 +13,10 @@ import {
   PiSwapFill,
 } from "react-icons/pi";
 
+const ApiGlbPreview = dynamic(() => import("@/components/ApiGlbPreview"), {
+  ssr: false,
+});
+
 const apiShowcase = [
   {
     id: "merse-gerador-de-imagem",
@@ -18,6 +24,10 @@ const apiShowcase = [
     description: "Transforme prompts em renders cinematográficos no endpoint otimizado da Merse.",
     badge: "Imagem",
     accent: "from-purple-500/40 via-blue-500/25 to-transparent",
+    bottomAccent: "from-violet-400 via-blue-400 to-cyan-300",
+    cardBorder: "border-blue-200/25",
+    badgeTone: "border-violet-200/45 text-violet-100",
+    iconTone: "border-blue-200/35 bg-blue-500/10 text-blue-100",
     icon: PiImageFill,
     command: "npx create-replicate --model=3mgalaxia/merse-gerador-de-imagem",
   },
@@ -28,6 +38,10 @@ const apiShowcase = [
       "Envie uma foto e receba a versão masculina ou feminina com estilo Merse mantendo o rosto original.",
     badge: "Gênero",
     accent: "from-fuchsia-500/35 via-indigo-500/25 to-transparent",
+    bottomAccent: "from-fuchsia-400 via-rose-400 to-pink-300",
+    cardBorder: "border-fuchsia-200/25",
+    badgeTone: "border-rose-200/45 text-rose-100",
+    iconTone: "border-fuchsia-200/35 bg-fuchsia-500/10 text-fuchsia-100",
     icon: PiSwapFill,
     command: "npx create-replicate --model=3mgalaxia/merse",
   },
@@ -37,12 +51,19 @@ const apiShowcase = [
     description: "Receba HTML completo para landings e seções futuristas com estética Merse.",
     badge: "Sites",
     accent: "from-cyan-500/35 via-emerald-500/25 to-transparent",
+    bottomAccent: "from-cyan-400 via-sky-400 to-emerald-300",
+    cardBorder: "border-cyan-200/25",
+    badgeTone: "border-cyan-200/45 text-cyan-100",
+    iconTone: "border-cyan-200/35 bg-cyan-500/10 text-cyan-100",
     icon: PiBrowsersFill,
     command: "npx create-replicate --model=3mgalaxia/merse-gerador-de-site",
   },
 ] as const;
 
 type ApiId = (typeof apiShowcase)[number]["id"];
+
+const astronautPrompt =
+  "Fotografia ultra-realista de um astronauta flutuando no espaco profundo, capturada como se fosse tirada por uma camera profissional full-frame da NASA. O traje espacial e extremamente detalhado, com texturas reais do tecido tecnico, costuras visiveis, pequenas marcas de uso, poeira espacial sutil e micro-arranhoes no visor do capacete. O visor e altamente reflexivo, mostrando o reflexo curvo da Terra ao fundo, com oceanos azul-profundos, nuvens volumetricas realistas e o brilho suave da atmosfera. Iluminacao fisica realista vinda do Sol, criando contraste natural, sombras duras e brilho sutil nas bordas do traje (rim light). Profundidade de campo leve, foco nitido no capacete e leve desfoque no fundo estrelado. Estrelas discretas e espacadas, sem excesso de brilho. Atmosfera cientifica autentica, sem efeitos exagerados, sem glow artificial. Textura de pele visivel atraves do visor levemente transparente, com detalhes de poros e expressao concentrada. Alta resolucao, nitidez extrema, cores naturais, HDR equilibrado, fotografia documental espacial, 8K, cinematic realism.";
 
 const setupSteps = [
   {
@@ -80,7 +101,7 @@ const apiDemos = [
     badge: "Imagem",
     accent: "from-purple-500/45 via-blue-500/25 to-transparent",
     inputs: [
-      { label: "prompt", value: "tenis futurista em neon com fundo limpo" },
+      { label: "prompt", value: astronautPrompt },
       { label: "provider", value: "merse" },
       { label: "aspectRatio", value: "16:9" },
     ],
@@ -92,7 +113,8 @@ const apiDemos = [
   "provider": "merse",
   "usage": { "credits": 10 }
 }`,
-    preview: "Render cinematográfico pronto para campanhas",
+    preview: "Preview real com imagem local em alta fidelidade",
+    previewKind: "image",
   },
   {
     id: "merse",
@@ -111,7 +133,8 @@ const apiDemos = [
   "imageUrl": "https://cdn.merse.ai/identity.png",
   "provider": "merse"
 }`,
-    preview: "Identidade ajustada mantendo traços originais",
+    preview: "Preview 3D real usando o arquivo .glb do public/api",
+    previewKind: "model",
   },
   {
     id: "merse-gerador-de-site",
@@ -131,6 +154,7 @@ const apiDemos = [
   "sections": ["hero", "features", "cta"]
 }`,
     preview: "Blueprint HTML completo com visual Merse",
+    previewKind: "site",
   },
 ] as const;
 
@@ -189,17 +213,22 @@ export default function ApisPublicas() {
         <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-12">
           <header className="flex flex-col gap-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">APIs públicas</p>
-                <h1 className="text-3xl font-semibold md:text-4xl">
-                  <span className="bg-gradient-to-r from-emerald-200 via-cyan-200 to-purple-200 bg-clip-text text-transparent">
-                    Integre direto com o laboratório Merse
-                  </span>
-                </h1>
-                <p className="max-w-3xl text-sm text-white/70">
-                  Conecte seu stack às engines hospedadas no Replicate e acelere protótipos de imagem,
-                  troca de gênero e HTML.
-                </p>
+              <div className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/55 p-6 backdrop-blur-2xl md:flex-1">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.07] via-transparent to-black/30" />
+                <div className="pointer-events-none absolute -top-16 right-0 h-40 w-40 rounded-full bg-cyan-300/10 blur-[90px]" />
+                <div className="pointer-events-none absolute bottom-0 left-6 right-6 h-[3px] rounded-full bg-gradient-to-r from-purple-400 via-cyan-300 to-emerald-300" />
+                <div className="relative space-y-3">
+                  <p className="text-xs uppercase tracking-[0.4em] text-cyan-100/80">APIs públicas</p>
+                  <h1 className="text-3xl font-semibold md:text-4xl">
+                    <span className="bg-gradient-to-r from-cyan-200 via-white to-purple-200 bg-clip-text text-transparent">
+                      Integre direto com o laboratório Merse
+                    </span>
+                  </h1>
+                  <p className="max-w-3xl text-sm text-white/70">
+                    Conecte seu stack às engines hospedadas no Replicate e acelere protótipos de imagem,
+                    troca de gênero e HTML.
+                  </p>
+                </div>
               </div>
               <Link
                 href="/dev-hub"
@@ -268,20 +297,22 @@ export default function ApisPublicas() {
                     key={api.id}
                     type="button"
                     onClick={() => handleOpenApiGuide(api.id)}
-                    className="group relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 text-left shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1"
+                    className={`group relative w-full overflow-hidden rounded-3xl border bg-black/70 p-5 text-left shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 ${api.cardBorder}`}
                   >
-                    <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent} opacity-85`} />
-                    <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
+                    <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.08] via-transparent to-black/35" />
+                    <div className={`pointer-events-none absolute -bottom-8 left-5 h-28 w-28 rounded-full bg-gradient-to-br ${api.accent} opacity-45 blur-[48px]`} />
+                    <div className="pointer-events-none absolute -top-14 right-4 h-28 w-28 rounded-full bg-white/10 blur-[70px]" />
+                    <div className={`pointer-events-none absolute bottom-0 left-5 right-5 h-[3px] rounded-full bg-gradient-to-r ${api.bottomAccent}`} />
                     <div className="relative flex h-full flex-col gap-4 text-white">
-                      <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
+                      <span className={`inline-flex w-fit items-center gap-2 rounded-full border bg-black/20 px-3 py-1 text-[11px] uppercase tracking-[0.35em] ${api.badgeTone}`}>
                         {api.badge}
                       </span>
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white/70">
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${api.iconTone}`}>
                         <Icon className="text-lg" />
                       </span>
                       <h2 className="text-xl font-semibold">{api.title}</h2>
                       <p className="text-sm text-white/70">{api.description}</p>
-                      <span className="mt-auto inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/60 transition group-hover:text-white">
+                      <span className="mt-auto inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/60 transition group-hover:text-cyan-100">
                         Ver guia <span aria-hidden>→</span>
                       </span>
                     </div>
@@ -412,7 +443,7 @@ export default function ApisPublicas() {
                                 <span className="text-[11px] uppercase tracking-[0.3em] text-white/50">
                                   {input.label}
                                 </span>
-                                <span className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/80">
+                                <span className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/80 break-words whitespace-pre-wrap">
                                   {input.value}
                                 </span>
                               </div>
@@ -432,7 +463,7 @@ export default function ApisPublicas() {
                         <div className="rounded-2xl border border-white/10 bg-black/45 p-4">
                           <p className="text-xs uppercase tracking-[0.3em] text-white/60">Preview</p>
                           <div className="mt-3 rounded-2xl border border-white/10 bg-black/60 p-4">
-                            {demo.id === "merse-gerador-de-site" ? (
+                            {demo.previewKind === "site" ? (
                               <div className="space-y-3">
                                 <div className="h-10 rounded-xl bg-white/10" />
                                 <div className="grid gap-3 md:grid-cols-2">
@@ -440,6 +471,26 @@ export default function ApisPublicas() {
                                   <div className="h-20 rounded-xl bg-white/10" />
                                 </div>
                                 <div className="h-12 rounded-xl bg-white/10" />
+                              </div>
+                            ) : demo.previewKind === "image" ? (
+                              <div className="space-y-3">
+                                <div className="overflow-hidden rounded-xl border border-white/10">
+                                  <Image
+                                    src="/api/api.imagem.png"
+                                    alt="Preview astronauta ultra-realista"
+                                    width={1536}
+                                    height={1024}
+                                    className="h-auto w-full object-cover"
+                                    priority={false}
+                                  />
+                                </div>
+                                <div className="max-h-32 overflow-auto rounded-xl border border-white/10 bg-black/40 p-3">
+                                  <p className="text-[11px] leading-relaxed text-white/75">{astronautPrompt}</p>
+                                </div>
+                              </div>
+                            ) : demo.previewKind === "model" ? (
+                              <div className="h-[320px] overflow-hidden rounded-xl border border-white/10">
+                                <ApiGlbPreview />
                               </div>
                             ) : (
                               <div className="flex h-40 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent text-xs uppercase tracking-[0.35em] text-white/60">

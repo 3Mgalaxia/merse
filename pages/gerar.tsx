@@ -17,8 +17,6 @@ import {
   PiImageFill as PiImageFillIcon,
   PiCodeFill,
   PiDownloadSimpleFill,
-  PiCheckCircleFill,
-  PiCopySimpleFill,
 } from "react-icons/pi";
 import { isDesktopApp } from "@/utils/isDesktopApp";
 
@@ -48,6 +46,16 @@ const moduleIconMap = {
   showcase: PiImageFillIcon,
   "canvas-ia": PiBrowsersFill,
   "voz-ia": PiChatsFill,
+  "agent-swarm": PiCodeFill,
+  "memoria-marca": PiImageFillIcon,
+  "ab-lab": PiTrophyFill,
+  "cena-infinita": PiVideoFill,
+  "trend-oraculo": PiTrophyFill,
+  "prompt-genoma": PiCodeFill,
+  "focus-group-ia": PiChatsFill,
+  "roteiro-vivo": PiVideoFill,
+  "orbita-release": PiInstagramLogoFill,
+  "multi-cena-produto": PiImageFillIcon,
 } as const;
 
 type ModuleKey = keyof typeof moduleIconMap;
@@ -252,6 +260,86 @@ const moduleBlocks: Array<{
     icon: "voz-ia",
     accent: "from-orange-500/70 via-rose-400/55 to-amber-900/80",
   },
+  // 17. Agent Swarm
+  {
+    title: "Agent Swarm Studio",
+    href: "/agent-swarm",
+    description: "Orquestre múltiplos agentes IA para executar pesquisa, roteiro, visual e publicação em cadeia.",
+    icon: "agent-swarm",
+    accent: "from-sky-500/65 via-violet-500/45 to-indigo-900/80",
+  },
+  // 18. Memória de Marca
+  {
+    title: "Memória de Marca Neural",
+    href: "/memoria-de-marca",
+    description: "Treine uma memória visual da sua marca e aplique o mesmo estilo em todas as gerações.",
+    icon: "memoria-marca",
+    accent: "from-emerald-500/65 via-cyan-500/45 to-teal-900/80",
+  },
+  // 19. AB Lab
+  {
+    title: "AB Lab Autônomo",
+    href: "/ab-lab",
+    description: "Gere variações A/B automaticamente e receba score preditivo de conversão antes de publicar.",
+    icon: "ab-lab",
+    accent: "from-amber-500/65 via-orange-500/45 to-rose-900/80",
+  },
+  // 20. Cena Infinita
+  {
+    title: "Cena Infinita",
+    href: "/cena-infinita",
+    description: "Conecte clipes curtos em uma sequência contínua com continuidade de câmera, luz e narrativa.",
+    icon: "cena-infinita",
+    accent: "from-fuchsia-500/65 via-blue-500/45 to-slate-900/80",
+  },
+  // 21. Oráculo de tendências
+  {
+    title: "Oráculo de Tendências",
+    href: "/trend-oraculo",
+    description: "Descubra temas com potencial viral por nicho e receba formatos ideais para cada plataforma.",
+    icon: "trend-oraculo",
+    accent: "from-amber-500/65 via-orange-500/40 to-black/70",
+  },
+  // 22. Prompt Genoma
+  {
+    title: "Prompt Genoma",
+    href: "/prompt-genoma",
+    description: "Mutação inteligente de prompt para gerar variações inéditas de estilo, câmera e narrativa.",
+    icon: "prompt-genoma",
+    accent: "from-violet-500/70 via-fuchsia-500/45 to-black/70",
+  },
+  // 23. Focus Group IA
+  {
+    title: "Focus Group IA",
+    href: "/focus-group-ia",
+    description: "Teste ideias com personas sintéticas antes de publicar e veja score de aceitação em segundos.",
+    icon: "focus-group-ia",
+    accent: "from-cyan-500/70 via-blue-500/45 to-black/70",
+  },
+  // 24. Roteiro Vivo
+  {
+    title: "Roteiro Vivo",
+    href: "/roteiro-vivo",
+    description: "Quebre sua campanha em cenas com tempo, gancho e CTA para renderização segmentada.",
+    icon: "roteiro-vivo",
+    accent: "from-rose-500/70 via-orange-500/45 to-black/70",
+  },
+  // 25. Órbita de Release
+  {
+    title: "Órbita de Release",
+    href: "/orbita-release",
+    description: "Planeje horários de publicação por canal com janelas de pico e cadência inteligente.",
+    icon: "orbita-release",
+    accent: "from-indigo-500/70 via-sky-500/45 to-black/70",
+  },
+  // 26. Multi-Cena Produto
+  {
+    title: "Multi-Cena Produto",
+    href: "/multi-cena-produto",
+    description: "Envie um produto e gere um pacote de cenas comerciais para anúncios, reels e vitrines.",
+    icon: "multi-cena-produto",
+    accent: "from-emerald-500/70 via-teal-500/45 to-black/70",
+  },
   // Extras não listados na ordem pedida
   {
     title: "Ranking Estelar",
@@ -284,31 +372,73 @@ const moduleBlocks: Array<{
   },
 ];
 
-const apiShowcase = [
+const movedModuleTitles = new Set([
+  "Ranking Estelar",
+  "Dev Hub",
+  "Showcase Merse",
+  "Agent Swarm Studio",
+  "Memória de Marca Neural",
+  "AB Lab Autônomo",
+  "Cena Infinita",
+  "Oráculo de Tendências",
+  "Prompt Genoma",
+  "Focus Group IA",
+  "Roteiro Vivo",
+  "Órbita de Release",
+  "Multi-Cena Produto",
+]);
+
+const ecosystemCards = [
   {
-    id: "merse-gerador-de-imagem",
-    title: "Merse · Gerador de Imagem",
-    description: "Transforme prompts em renders cinematográficos no endpoint otimizado da Merse.",
-    badge: "Imagem",
-    accent: "from-purple-500/40 via-blue-500/25 to-transparent",
-    command: "npx create-replicate --model=3mgalaxia/merse-gerador-de-imagem",
-  },
-  {
-    id: "merse",
-    title: "Merse · Base Criativa",
+    id: "merse-app-br",
+    badge: "Merse.app.br",
+    title: "APIs Públicas Merse",
     description:
-      "Envie uma foto e receba a versão masculina ou feminina com estilo Merse mantendo o rosto original.",
-    badge: "Gênero",
-    accent: "from-fuchsia-500/35 via-indigo-500/25 to-transparent",
-    command: null,
+      "Seu laboratório pronto para imagem, vídeo, objeto 3D e site sem montar infraestrutura. Você conecta, cria e publica no mesmo fluxo.",
+    highlights: [
+      "Catálogo de APIs já prontas com setup guiado",
+      "Passo a passo para integrar rápido no seu stack",
+      "Suporte 24h para tirar bloqueios e acelerar entrega",
+    ],
+    href: "https://merse.app.br",
+    cta: "Entrar na Merse.app.br",
+    accent: "from-emerald-500/45 via-cyan-500/30 to-blue-500/10",
+    glow: "from-emerald-300/35 via-cyan-300/15 to-transparent",
+    icon: "M",
   },
   {
-    id: "merse-gerador-de-site",
-    title: "Merse · Gerador de Site",
-    description: "Receba HTML completo para landings e seções futuristas com estética Merse.",
-    badge: "Sites",
-    accent: "from-cyan-500/35 via-emerald-500/25 to-transparent",
-    command: null,
+    id: "romexx",
+    badge: "Romexx.com.br",
+    title: "Romexx IA Empresarial",
+    description:
+      "Uma IA que opera junto com você: analisa erros operacionais, sugere investimento, responde clientes e acompanha o desempenho da equipe.",
+    highlights: [
+      "Diagnóstico de gargalos e oportunidades de crescimento",
+      "Monitoramento inteligente mesmo quando você está ausente",
+      "IA aplicada à gestão para decisões mais seguras e rápidas",
+    ],
+    href: "https://romexx.com.br",
+    cta: "Conhecer a Romexx",
+    accent: "from-violet-500/45 via-indigo-500/30 to-sky-500/10",
+    glow: "from-violet-300/30 via-indigo-300/15 to-transparent",
+    icon: "R",
+  },
+  {
+    id: "shopverse",
+    badge: "Shopverse.com.br",
+    title: "ShopVerse Creator Market",
+    description:
+      "Transforme criatividade em renda: publique prompts, mostre seus produtos como rede social e ganhe créditos ou dinheiro a cada uso.",
+    highlights: [
+      "Marketplace para vender prompts de criação com escala",
+      "Sistema de ganhos por uso recorrente dos seus prompts",
+      "Vitrine social para divulgar produtos e atrair compradores",
+    ],
+    href: "https://shopverse.com.br",
+    cta: "Entrar na ShopVerse",
+    accent: "from-fuchsia-500/45 via-rose-500/30 to-amber-500/10",
+    glow: "from-fuchsia-300/30 via-rose-300/15 to-transparent",
+    icon: "S",
   },
 ];
 
@@ -429,9 +559,6 @@ export default function Gerar() {
   const [highlightStage, setHighlightStage] = useState<"idle" | "card" | "checkout">("idle");
   const [enableGlows, setEnableGlows] = useState(false);
   const [firstCreation, setFirstCreation] = useState<FirstCreation | null>(null);
-  const [apiGuideOpen, setApiGuideOpen] = useState(false);
-  const [selectedApiId, setSelectedApiId] = useState(apiShowcase[0].id);
-  const [apiCopyStatus, setApiCopyStatus] = useState<"idle" | "copied">("idle");
   const starField = useMemo(
     () =>
       Array.from({ length: 220 }).map((_, index) => {
@@ -454,6 +581,10 @@ export default function Gerar() {
       }),
     [],
   );
+  const visibleModuleBlocks = useMemo(
+    () => moduleBlocks.filter((module) => !movedModuleTitles.has(module.title)),
+    [],
+  );
 
   useEffect(() => {
     if (!showPackCheckout) return;
@@ -466,10 +597,6 @@ export default function Gerar() {
   useEffect(() => {
     setEnableGlows(isDesktopApp());
   }, []);
-
-  useEffect(() => {
-    setApiCopyStatus("idle");
-  }, [selectedApiId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -504,31 +631,6 @@ export default function Gerar() {
       setHighlightStage("checkout");
       highlightTimeoutRef.current = null;
     }, 420);
-  };
-
-  const selectedApi = useMemo(
-    () => apiShowcase.find((api) => api.id === selectedApiId) ?? apiShowcase[0],
-    [selectedApiId],
-  );
-
-  const handleOpenApiGuide = (apiId: string) => {
-    setSelectedApiId(apiId);
-    setApiGuideOpen(true);
-  };
-
-  const handleCloseApiGuide = () => {
-    setApiGuideOpen(false);
-  };
-
-  const handleCopyApiCommand = async () => {
-    if (!selectedApi.command) return;
-    try {
-      await navigator.clipboard.writeText(selectedApi.command);
-      setApiCopyStatus("copied");
-      window.setTimeout(() => setApiCopyStatus("idle"), 1600);
-    } catch {
-      setApiCopyStatus("idle");
-    }
   };
 
   const handlePackCheckoutSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -773,7 +875,7 @@ export default function Gerar() {
         </header>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {moduleBlocks.map((module) => {
+          {visibleModuleBlocks.map((module) => {
             const Icon = moduleIconMap[module.icon];
             const isDownload = module.download === true;
             if (isDownload) {
@@ -827,127 +929,60 @@ export default function Gerar() {
 
       <section id="apis" className="mt-12 space-y-6">
         <header className="flex flex-col gap-2 text-white/80">
-          <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">APIs públicas</p>
-          <h3 className="text-2xl font-semibold text-white md:text-3xl">Integre direto com o laboratório Merse</h3>
+          <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">ECOSSISTEMA IA</p>
+          <h3 className="text-2xl font-semibold text-white md:text-3xl">Merse, Romexx e ShopVerse no mesmo fluxo</h3>
           <p className="max-w-3xl text-sm text-white/60">
-            Conecte seu stack às engines hospedadas no Replicate e acelere protótipos de imagem, troca de gênero e HTML.
+            Construa com APIs prontas na Merse.app.br, opere sua empresa com a inteligência da Romexx e transforme prompts
+            em renda recorrente com a ShopVerse.
           </p>
         </header>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {apiShowcase.map((api) => (
-            <button
-              key={api.id}
-              type="button"
-              onClick={() => handleOpenApiGuide(api.id)}
-              className="group relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-5 text-left shadow-[0_14px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 hover:-translate-y-1"
+          {ecosystemCards.map((card) => (
+            <a
+              key={card.id}
+              href={card.href}
+              target="_blank"
+              rel="noreferrer"
+              className="group relative isolate w-full overflow-hidden rounded-[30px] border border-white/20 bg-white/[0.08] p-6 text-left shadow-[0_22px_70px_rgba(2,8,22,0.58),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-[26px] [backdrop-filter:blur(26px)_saturate(175%)] transition duration-500 hover:-translate-y-2 hover:border-white/45 hover:shadow-[0_34px_96px_rgba(4,10,28,0.66),inset_0_1px_0_rgba(255,255,255,0.48)]"
             >
-              <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${api.accent} opacity-85`} />
-              <div className="absolute -top-16 -right-24 h-40 w-40 rounded-full bg-white/10 blur-[120px]" />
+              <div className={`pointer-events-none absolute inset-0 rounded-[30px] bg-gradient-to-br ${card.accent} opacity-72`} />
+              <div
+                className={`pointer-events-none absolute -left-16 top-[-28%] h-64 w-64 rounded-full bg-gradient-to-br ${card.glow} blur-[95px]`}
+              />
+              <div className="pointer-events-none absolute inset-0 rounded-[30px] bg-[radial-gradient(140%_90%_at_8%_0%,rgba(255,255,255,0.52)_0%,rgba(255,255,255,0.16)_28%,rgba(255,255,255,0.02)_52%,transparent_74%)] opacity-80" />
+              <div className="pointer-events-none absolute inset-0 rounded-[30px] bg-[linear-gradient(145deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.09)_24%,rgba(255,255,255,0.03)_46%,rgba(0,0,0,0.24)_100%)] opacity-65" />
+              <div className="pointer-events-none absolute inset-x-4 top-3 h-[1px] rounded-full bg-white/60 blur-[0.4px]" />
+              <div className="pointer-events-none absolute inset-x-5 bottom-0 h-24 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+              <div className="pointer-events-none absolute -left-1/2 top-[-12%] h-[170%] w-1/2 -translate-x-[185%] rotate-[16deg] bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.16)_42%,rgba(255,255,255,0)_88%)] opacity-60 blur-[1.3px] transition-transform duration-[1200ms] ease-out group-hover:translate-x-[235%]" />
+              <div className="pointer-events-none absolute inset-[1px] rounded-[28px] border border-white/15" />
+              <div className="pointer-events-none absolute inset-[2px] rounded-[27px] bg-[radial-gradient(circle_at_82%_80%,rgba(255,255,255,0.08),transparent_40%)]" />
               <div className="relative flex h-full flex-col gap-4 text-white">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
-                  {api.badge}
-                </span>
-                <h4 className="text-xl font-semibold">{api.title}</h4>
-                <p className="text-sm text-white/70">{api.description}</p>
-                <span className="mt-auto inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/60 transition group-hover:text-white">
-                  Ver guia <span aria-hidden>→</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 bg-white/[0.14] px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-md">
+                    {card.badge}
+                  </span>
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/30 bg-white/[0.18] text-base font-semibold text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_24px_rgba(0,0,0,0.3)] backdrop-blur-md">
+                    {card.icon}
+                  </span>
+                </div>
+                <h4 className="text-xl font-semibold md:text-2xl">{card.title}</h4>
+                <p className="text-sm leading-relaxed text-white/85">{card.description}</p>
+                <ul className="space-y-2 text-sm text-white/80">
+                  {card.highlights.map((highlight) => (
+                    <li key={highlight} className="flex items-start gap-2">
+                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/85 shadow-[0_0_12px_rgba(255,255,255,0.55)]" />
+                      <span>{highlight}</span>
+                    </li>
+                  ))}
+                </ul>
+                <span className="mt-auto inline-flex w-fit items-center gap-2 rounded-full border border-white/35 bg-white/[0.18] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition group-hover:border-white/55 group-hover:bg-white/[0.28]">
+                  {card.cta}
+                  <span aria-hidden>↗</span>
                 </span>
               </div>
-            </button>
+            </a>
           ))}
         </div>
-        <AnimatePresence>
-          {apiGuideOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 18 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.05] p-8 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
-            >
-              <div className="pointer-events-none absolute inset-0">
-                <div className="absolute -right-20 -top-16 h-52 w-52 rounded-full bg-white/10 blur-[120px]" />
-                <div
-                  className={`absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-gradient-to-br ${selectedApi.accent} opacity-70 blur-[140px]`}
-                />
-              </div>
-              <div className="relative flex flex-col gap-6">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.35em] text-white/70">
-                      Guia de instalação
-                    </p>
-                    <h3 className="text-2xl font-semibold text-white">{selectedApi.title}</h3>
-                    <p className="text-sm text-white/70">{selectedApi.description}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCloseApiGuide}
-                    className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/80 transition hover:border-white/35 hover:bg-white/20"
-                  >
-                    Fechar
-                  </button>
-                </div>
-                <div className="flex flex-col gap-3">
-                  {selectedApi.command ? (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.35em] text-white/60">
-                        <span>Comando</span>
-                        <button
-                          type="button"
-                          onClick={handleCopyApiCommand}
-                          className={`inline-flex items-center gap-2 rounded-full border border-white/20 bg-gradient-to-r ${selectedApi.accent} px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white transition hover:border-white/40`}
-                        >
-                          {apiCopyStatus === "copied" ? (
-                            <>
-                              <PiCheckCircleFill /> Copiado
-                            </>
-                          ) : (
-                            <>
-                              <PiCopySimpleFill /> Copiar comando
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
-                        <code className="block break-all font-mono text-xs text-white/80">
-                          {selectedApi.command}
-                        </code>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/60">
-                      Comando em preparo. Em breve adicionamos a instalação desta API.
-                    </div>
-                  )}
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
-                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 01</p>
-                    <p className="mt-3 text-white">Abra o terminal</p>
-                    <p className="mt-2 text-xs text-white/60">
-                      Use o terminal do seu sistema para rodar o comando.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
-                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 02</p>
-                    <p className="mt-3 text-white">Cole o comando</p>
-                    <p className="mt-2 text-xs text-white/60">
-                      Copie o comando acima e cole no terminal.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
-                    <p className="text-xs uppercase tracking-[0.35em] text-white/60">Passo 03</p>
-                    <p className="mt-3 text-white">Siga o assistente</p>
-                    <p className="mt-2 text-xs text-white/60">
-                      O setup cria a estrutura e prepara o endpoint.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </section>
 
       <section className="relative mt-12 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.037] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-3xl">

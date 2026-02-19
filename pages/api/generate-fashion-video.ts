@@ -10,6 +10,8 @@ type SuccessResponse = {
   fabric?: string;
   provider: string;
   storyboard?: string;
+  referenceImage?: string;
+  referenceProvider?: string;
 };
 
 type ErrorResponse = {
@@ -76,6 +78,15 @@ const CAMERA_ANGLES: Record<string, string> = {
 
 const REPLICATE_API_URL = "https://api.replicate.com/v1";
 const cachedVersions = new Map<string, string>();
+const DEFAULT_NANO_NEGATIVE =
+  "person, human, mannequin, model, body, background, wall, floor, studio scene, shadow on ground, reflection surface, watermark, logo, text, blur, low poly, flat texture, 2D illustration, cartoon, sketch, painting";
+
+type PromptBundle = {
+  imagePrompt: string;
+  videoPrompt: string;
+  negativePrompt: string;
+  provider: "openai" | "fallback";
+};
 
 export const config = {
   api: {
@@ -215,6 +226,298 @@ async function generateStoryboard({
   }
 }
 
+function fallbackImagePrompt({
+  lookDescription,
+  fabric,
+}: {
+  lookDescription: string;
+  fabric: string;
+}) {
+  return [
+    "Ultra realistic 3D clothing render.",
+    `High fashion outfit: ${lookDescription}.`,
+    "Fully volumetric garment with physically accurate cloth simulation.",
+    "Detailed folds, tension points, seams, layering, and garment thickness visible on edges.",
+    `Premium materials and micro fabric texture visible (focus on ${fabric}).`,
+    "Cinematic studio lighting, ray tracing, global illumination, soft shadow depth (no ground shadow).",
+    "Floating clothing only, no mannequin, no human, hollow interior slightly visible.",
+    "Centered composition, isolated object, transparent background, PNG alpha channel, clean cut edges.",
+    "Octane render style, Blender Cycles quality, 8K.",
+  ].join(" ");
+}
+
+function fallbackVideoPrompt({
+  lookDescription,
+  modelPreset,
+  cameraAngle,
+  fabric,
+  duration,
+}: {
+  lookDescription: string;
+  modelPreset: string;
+  cameraAngle: string;
+  fabric: string;
+  duration: number;
+}) {
+  const preset = MODEL_PRESETS[modelPreset];
+  const camera = CAMERA_ANGLES[cameraAngle];
+
+  const presetHint =
+    modelPreset === "hologram"
+      ? "Holographic volumetric garment presentation (no human)."
+      : modelPreset === "metahuman"
+      ? "Hyper-realistic MetaHuman model wearing the garment from the reference image."
+      : "Editorial runway film with a model wearing the garment from the reference image.";
+
+  const cameraHint =
+    cameraAngle === "orbit"
+      ? "Slow 360 orbit camera, smooth parallax, centered framing."
+      : cameraAngle === "detail"
+      ? "Macro close-ups of stitching, fibers, and folds; shallow depth of field."
+      : "Front-facing cinematic shot with gentle dolly-in and stable framing.";
+
+  return [
+    "Create a premium fashion video using the garment design from the reference image.",
+    `Look: ${lookDescription}.`,
+    presetHint,
+    preset?.label ? `Preset: ${preset.label}.` : null,
+    preset?.description ?? null,
+    camera ? `Camera: ${camera}.` : null,
+    cameraHint,
+    `Fabric highlight: ${fabric}.`,
+    `Duration: about ${duration}s.`,
+    "Cinematic studio/runway lighting, clean background, no watermarks, no text.",
+    "Merse premium aesthetic, smooth motion, high detail, realistic cloth dynamics.",
+  ]
+    .filter((item) => item && String(item).trim())
+    .join(" ");
+}
+
+async function generatePromptBundle({
+  lookDescription,
+  modelPreset,
+  cameraAngle,
+  fabric,
+  duration,
+}: {
+  lookDescription: string;
+  modelPreset: string;
+  cameraAngle: string;
+  fabric: string;
+  duration: number;
+}): Promise<PromptBundle> {
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      imagePrompt: fallbackImagePrompt({ lookDescription, fabric }),
+      videoPrompt: fallbackVideoPrompt({
+        lookDescription,
+        modelPreset,
+        cameraAngle,
+        fabric,
+        duration,
+      }),
+      negativePrompt: DEFAULT_NANO_NEGATIVE,
+      provider: "fallback",
+    };
+  }
+
+  try {
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: (process.env.OPENAI_RUNWAY_PROMPT_MODEL ?? "gpt-4o-mini").trim(),
+      temperature: 0.65,
+      max_tokens: 520,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are a prompt engineer for text-to-image and image-conditioned text-to-video.",
+            "Return ONLY valid JSON with keys: image_prompt, video_prompt, negative_prompt.",
+            "Write prompts in English. Keep them specific but not overly long.",
+            "image_prompt must describe a floating garment-only 3D render with transparent background (PNG alpha).",
+            "video_prompt must describe a cinematic fashion video that uses the garment design from the reference image.",
+            "negative_prompt must be a comma-separated list of things to avoid.",
+            "No markdown.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            `Look description: ${lookDescription}`,
+            `Model preset: ${MODEL_PRESETS[modelPreset]?.label ?? modelPreset} (${MODEL_PRESETS[modelPreset]?.description ?? "n/a"})`,
+            `Camera angle: ${CAMERA_ANGLES[cameraAngle] ?? cameraAngle}`,
+            `Fabric highlight: ${fabric}`,
+            `Duration: ${duration}s`,
+            "",
+            "Constraints for image_prompt: isolated object, centered, no mannequin/human, no background, clean cut edges, realistic cloth physics, premium materials, studio lighting, 8K.",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    const raw = extractMessageText(completion.choices?.[0]?.message?.content);
+    const parsed = JSON.parse(raw) as {
+      image_prompt?: unknown;
+      video_prompt?: unknown;
+      negative_prompt?: unknown;
+    };
+
+    const imagePrompt =
+      typeof parsed.image_prompt === "string" && parsed.image_prompt.trim()
+        ? parsed.image_prompt.trim()
+        : fallbackImagePrompt({ lookDescription, fabric });
+    const videoPrompt =
+      typeof parsed.video_prompt === "string" && parsed.video_prompt.trim()
+        ? parsed.video_prompt.trim()
+        : fallbackVideoPrompt({ lookDescription, modelPreset, cameraAngle, fabric, duration });
+    const negativePrompt =
+      typeof parsed.negative_prompt === "string" && parsed.negative_prompt.trim()
+        ? parsed.negative_prompt.trim()
+        : DEFAULT_NANO_NEGATIVE;
+
+    return {
+      imagePrompt,
+      videoPrompt,
+      negativePrompt,
+      provider: "openai",
+    };
+  } catch (error) {
+    console.error("[generate-fashion-video] prompt bundle fallback:", error);
+    return {
+      imagePrompt: fallbackImagePrompt({ lookDescription, fabric }),
+      videoPrompt: fallbackVideoPrompt({ lookDescription, modelPreset, cameraAngle, fabric, duration }),
+      negativePrompt: DEFAULT_NANO_NEGATIVE,
+      provider: "fallback",
+    };
+  }
+}
+
+function resolveNanoBananaModelSlug() {
+  const raw = (
+    process.env.REPLICATE_NANO_BANANA_PRO_MODEL ??
+    process.env.REPLICATE_NANO_BANANA_MODEL ??
+    "google/nano-banana-pro"
+  )
+    .trim()
+    .toLowerCase();
+
+  // Force the "pro" variant when the base slug is configured.
+  if (raw === "google/nano-banana") return "google/nano-banana-pro";
+  return raw || "google/nano-banana-pro";
+}
+
+function collectImageUrls(payload: unknown) {
+  const urls: string[] = [];
+  const imageExt = /\.(png|jpe?g|webp)(\?.*)?$/i;
+
+  walkPayload(
+    payload,
+    (value, key) => {
+      if (typeof value !== "string") return;
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (trimmed.startsWith("data:image/")) {
+        urls.push(trimmed);
+        return;
+      }
+      if (!trimmed.startsWith("http")) return;
+
+      const loweredKey = key?.toLowerCase() ?? "";
+      const looksLikeImage =
+        imageExt.test(trimmed) ||
+        loweredKey.includes("image") ||
+        loweredKey.includes("png") ||
+        loweredKey.includes("jpg") ||
+        loweredKey.includes("jpeg") ||
+        loweredKey.includes("webp") ||
+        loweredKey.includes("url");
+
+      // Avoid picking video links.
+      if (/\.(mp4|mov|webm|gif)(\?.*)?$/i.test(trimmed)) return;
+      if (looksLikeImage) urls.push(trimmed);
+    },
+    new Set(),
+  );
+
+  // De-dup while preserving order.
+  return urls.filter((url, idx) => urls.indexOf(url) === idx);
+}
+
+async function generateNanoBananaImage({
+  prompt,
+  negativePrompt,
+  referenceImage,
+}: {
+  prompt: string;
+  negativePrompt: string;
+  referenceImage?: string;
+}) {
+  const token = (process.env.REPLICATE_NANO_BANANA_API_TOKEN ?? process.env.REPLICATE_API_TOKEN)?.trim();
+  if (!token) {
+    throw new Error("Defina REPLICATE_NANO_BANANA_API_TOKEN (ou REPLICATE_API_TOKEN) no .env.local.");
+  }
+
+  const model = resolveNanoBananaModelSlug();
+  const version = await ensureReplicateVersion(token, model, undefined);
+
+  // Keep inputs conservative to maximize compatibility across model variants.
+  const combinedPrompt = `${prompt.trim()}\n\nNegative: ${negativePrompt}`.trim();
+  const input: Record<string, unknown> = {
+    prompt: combinedPrompt,
+    num_outputs: 1,
+    aspect_ratio: "1:1",
+    guidance: 2,
+  };
+  if (referenceImage) {
+    input.image = referenceImage;
+  }
+
+  const prediction = await runReplicatePrediction({
+    token,
+    version,
+    input,
+    pollInterval: 2500,
+    maxAttempts: 30,
+  });
+
+  const urls = collectImageUrls(prediction.output);
+  if (!urls.length) {
+    throw new Error("Nano Banana não retornou uma imagem válida.");
+  }
+
+  return { imageUrl: urls[0]!, model };
+}
+
+async function removeBackgroundIfPossible(imageUrl: string) {
+  const token = (process.env.REPLICATE_API_TOKEN ?? "").trim();
+  if (!token) return { imageUrl, provider: "none" as const };
+
+  const model = (process.env.REPLICATE_REMBG_MODEL ?? "cjwbw/rembg").trim();
+  if (!model) return { imageUrl, provider: "none" as const };
+
+  try {
+    const version = await ensureReplicateVersion(token, model, undefined);
+    const prediction = await runReplicatePrediction({
+      token,
+      version,
+      input: { image: imageUrl },
+      pollInterval: 2000,
+      maxAttempts: 20,
+    });
+
+    const urls = collectImageUrls(prediction.output);
+    if (!urls.length) return { imageUrl, provider: "none" as const };
+    return { imageUrl: urls[0]!, provider: "rembg" as const };
+  } catch (error) {
+    console.warn("[generate-fashion-video] rembg fallback:", error);
+    return { imageUrl, provider: "none" as const };
+  }
+}
+
 async function generateOpenAIImage({
   prompt,
   referenceImage,
@@ -286,8 +589,12 @@ function buildProviders(): ProviderConfig[] {
     {
       key: "veo",
       label: "Veo",
-      model: process.env.REPLICATE_VEO_MODEL ?? "google/veo-3",
-      version: process.env.REPLICATE_VEO_MODEL_VERSION,
+      // Avoid accidental env overrides (ex.: REPLICATE_VEO_MODEL set to sora).
+      model: (process.env.REPLICATE_VEO_MODEL ?? "").toLowerCase().includes("veo")
+        ? process.env.REPLICATE_VEO_MODEL
+        : "google/veo-3",
+      // Resolve at runtime to avoid version/model mismatches.
+      version: undefined,
       token: process.env.REPLICATE_VEO_API_TOKEN ?? process.env.REPLICATE_API_TOKEN,
       pollInterval: 3000,
       maxAttempts: 45,
@@ -651,6 +958,53 @@ async function generateVideoWithFallback({
   );
 }
 
+async function generateVideoWithVeoOnly({
+  prompt,
+  duration,
+  referenceImage,
+  referenceVideo,
+}: {
+  prompt: string;
+  duration: number;
+  referenceImage?: string;
+  referenceVideo?: string;
+}) {
+  const veo = buildProviders().find((p) => p.key === "veo");
+  const model = veo?.model?.trim();
+  const token = veo?.token?.trim();
+  if (!veo || !model || !token) {
+    throw new Error("Veo não está configurado. Defina REPLICATE_VEO_API_TOKEN e REPLICATE_VEO_MODEL.");
+  }
+
+  const version = await ensureReplicateVersion(token, model, undefined);
+  const input = veo.buildInput({
+    prompt,
+    duration,
+    referenceImage,
+    referenceVideo,
+  });
+
+  const prediction = await runReplicatePrediction({
+    token,
+    version,
+    input,
+    pollInterval: veo.pollInterval,
+    maxAttempts: veo.maxAttempts,
+  });
+
+  const { videos, covers, duration: reportedDuration } = collectMedia(prediction.output);
+  if (!videos.length) {
+    throw new Error("Veo não retornou URL de vídeo.");
+  }
+
+  return {
+    videoUrl: videos[0],
+    cover: covers[0],
+    duration: reportedDuration ?? duration,
+    provider: "veo",
+  };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>,
@@ -688,25 +1042,29 @@ export default async function handler(
       duration: normalizedDuration,
     });
 
-    const imagePrompt = `${fashionPrompt} Foto editorial em alta resolução, corpo inteiro, fundo limpo.`;
-    const videoPrompt = `${fashionPrompt} ${storyboard}`;
+    const promptBundle = await generatePromptBundle({
+      lookDescription: basePrompt,
+      modelPreset,
+      cameraAngle,
+      fabric,
+      duration: normalizedDuration,
+    });
 
-    let referenceImageForVideo = referenceMedia.image;
-    if (!referenceImageForVideo) {
-      try {
-        referenceImageForVideo = await generateOpenAIImage({
-          prompt: imagePrompt,
-          referenceImage: referenceMedia.image,
-        });
-      } catch (imageError) {
-        console.error("[generate-fashion-video] falha ao gerar frame-base:", imageError);
-      }
-    }
+    const imagePrompt = promptBundle.imagePrompt;
+    const videoPrompt = promptBundle.videoPrompt;
 
-    const videoResult = await generateVideoWithFallback({
+    const nano = await generateNanoBananaImage({
+      prompt: imagePrompt,
+      negativePrompt: promptBundle.negativePrompt,
+      referenceImage: referenceMedia.image,
+    });
+
+    const cutout = await removeBackgroundIfPossible(nano.imageUrl);
+
+    const videoResult = await generateVideoWithVeoOnly({
       prompt: videoPrompt,
       duration: normalizedDuration,
-      referenceImage: referenceImageForVideo,
+      referenceImage: cutout.imageUrl,
       referenceVideo: referenceMedia.video,
     });
 
@@ -715,6 +1073,8 @@ export default async function handler(
       duration: videoResult.duration ?? normalizedDuration,
       fabric,
       storyboard,
+      referenceImage: cutout.imageUrl,
+      referenceProvider: nano.model,
     });
   } catch (error) {
     console.error("Erro ao gerar vídeo fashion:", error);

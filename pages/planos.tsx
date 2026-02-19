@@ -19,26 +19,10 @@ type TierInfo = {
 
 const tiers: TierInfo[] = [
   {
-    id: "navigator",
-    badge: "Guia",
-    title: "Plano Ideal",
-    subtitle: "Decida em 20 segundos",
-    highlight: "Responda 3 perguntas e eu recomendo 1 dos 4 planos",
-    priceLabel: "Recomendação automática",
-    priceValue: null,
-    features: [
-      "Recomenda Free, Pulse, Nebula ou Galáxia",
-      "Explica o porquê com base no seu uso",
-      "Te leva direto para o checkout certo",
-    ],
-    accent: "from-fuchsia-500/45 via-purple-500/15 to-cyan-500/0",
-    ctaLabel: "Descobrir meu plano",
-  },
-  {
     id: "free",
-    badge: "Explorar",
-    title: "Free Orbit",
-    subtitle: "Experimente a Merse",
+    badge: "Gratuito",
+    title: "Orbit",
+    subtitle: "Acesso inicial",
     highlight: "300 créditos Merse / mês",
     priceLabel: "Gratuito",
     priceValue: 0,
@@ -73,8 +57,8 @@ const tiers: TierInfo[] = [
     title: "Nebula Studio",
     subtitle: "Fluxo contínuo para creators",
     highlight: "5.000 créditos Merse / mês",
-    priceLabel: "US$ 35/mês",
-    priceValue: 35,
+    priceLabel: "US$ 24/mês",
+    priceValue: 24,
     features: [
       "5.000 créditos mensais — 1 imagem Merse AI = 10 créditos (≈500 imagens)",
       "ChatGPT Vision consome 25 créditos por geração (≈200 por ciclo)",
@@ -87,7 +71,24 @@ const tiers: TierInfo[] = [
     planKey: "nebula",
   },
   {
-    id: "galaxy",
+    id: "supernova",
+    badge: "Escala total",
+    title: "Galáxia",
+    subtitle: "Potência máxima para squads criativos",
+    highlight: "10.000 créditos Merse / mês",
+    priceLabel: "US$ 35/mês",
+    priceValue: 35,
+    features: [
+      "10.000 créditos mensais — 1 imagem Merse AI = 10 créditos (≈1.000 imagens)",
+      "Fluxo avançado com automações e bibliotecas privadas",
+      "Prioridade máxima em novos motores Merse",
+      "Suporte estratégico para operação criativa contínua",
+    ],
+    accent: "from-cyan-500/50 via-cyan-500/10 to-cyan-500/0",
+    planKey: "supernova",
+  },
+  {
+    id: "enterprise",
     badge: "Sob medida",
     title: "Galáxia Prime",
     subtitle: "Escala ilimitada para squads",
@@ -100,7 +101,7 @@ const tiers: TierInfo[] = [
       "Governança e assinatura eletrônica integrada",
       "Blueprints exclusivos e co-criação de features",
     ],
-    accent: "from-cyan-500/50 via-cyan-500/10 to-cyan-500/0",
+    accent: "from-sky-500/50 via-sky-500/10 to-sky-500/0",
     isContactOnly: true,
   },
 ];
@@ -115,7 +116,8 @@ const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
 
 const PIX_PLAN_PRICES_BRL: Partial<Record<keyof typeof planCatalog, number>> = {
   pulse: 54.89,
-  nebula: 192.98,
+  nebula: 132.98,
+  supernova: 192.98,
 };
 
 export default function Planos() {
@@ -179,7 +181,7 @@ export default function Planos() {
     support: "none" | "guided" | null,
   ) => {
     if (!goal || !volume || !support) return null;
-    if (goal === "team") return tiers.find((t) => t.id === "galaxy") ?? null;
+    if (goal === "team") return tiers.find((t) => t.id === "enterprise") ?? null;
 
     const volumeScore = volume === "low" ? 0 : volume === "mid" ? 1 : volume === "high" ? 2 : 3;
     const supportScore = support === "guided" ? 1 : 0;
@@ -188,7 +190,8 @@ export default function Planos() {
 
     if (score <= 1) return tiers.find((t) => t.id === "free") ?? null;
     if (score <= 3) return tiers.find((t) => t.id === "pulse") ?? null;
-    return tiers.find((t) => t.id === "nebula") ?? null;
+    if (score <= 5) return tiers.find((t) => t.id === "nebula") ?? null;
+    return tiers.find((t) => t.id === "supernova") ?? null;
   };
 
   useEffect(() => {
@@ -338,7 +341,7 @@ export default function Planos() {
           </Link>
         </header>
 
-        <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
           {tiers.map((tier) => {
             const isCurrent = tier.planKey ? plan === tier.planKey : false;
             const limitLabel = tier.planKey
